@@ -219,15 +219,21 @@
         }, 2000);
       }
 
-      function attemptCopyShareCode(){
+      async function attemptCopyShareCode(){
         if(!activeShareCode) return;
         const formatted = formatDisplayCode(activeShareCode);
+        let sharedOk = true;
+        try{
+          const list = lists.find(x=>x.id===currentListId);
+          if(list && typeof window !== 'undefined' && typeof window.firebaseShareList === 'function'){
+            await window.firebaseShareList(activeShareCode, { title: list.title, tasks: list.tasks });
+          }
+        }catch(err){
+          sharedOk = false;
+        }
+        const onCopyOk = ()=> notifyCopyFeedback(sharedOk ? 'Copiado e compartilhado!' : 'Copiado! (falha ao compartilhar)', !sharedOk);
         if(navigator.clipboard && navigator.clipboard.writeText){
-          navigator.clipboard.writeText(formatted).then(()=>{
-            notifyCopyFeedback('Copiado!', false);
-          }).catch(()=>{
-            legacyCopy(formatted);
-          });
+          navigator.clipboard.writeText(formatted).then(onCopyOk).catch(()=>{ legacyCopy(formatted); });
         } else {
           legacyCopy(formatted);
         }
@@ -601,7 +607,32 @@
       if(btnImportCode){ btnImportCode.addEventListener('click', ()=>{ closeModal(); openCodeModal(); }); }
       if(codeCancel){ codeCancel.addEventListener('click', closeCodeModal); }
       if(codeBackdrop){ codeBackdrop.addEventListener('click', (evt)=>{ if(evt.target===codeBackdrop) closeCodeModal(); }); }
-      if(codeImport){ codeImport.addEventListener('click', ()=>{/* no-op for now */}); }
+      if(codeImport){
+        codeImport.addEventListener('click', async ()=>{
+          try{
+            if(!codeInputs || codeInputs.length===0){ return; }
+            const raw = codeInputs.map(i=> (i.value||'').toUpperCase().replace(/[^0-9A-Z]/g,'')).join('');
+            const normalized = raw.slice(0,6);
+            if(normalized.length!==6){ alert('Informe um código de 6 caracteres.'); return; }
+            if(typeof window === 'undefined' || typeof window.firebaseGetList !== 'function'){
+              alert('Importação indisponível no momento.'); return;
+            }
+            codeImport.disabled = true;
+            const remote = await window.firebaseGetList(normalized);
+            codeImport.disabled = false;
+            if(!remote){ alert('Código não encontrado.'); return; }
+            const id = 'l_'+Date.now();
+            const title = remote.title || 'Lista Importada';
+            const tasks = Array.isArray(remote.tasks) ? remote.tasks.map((t, idx)=>({ id: 't_'+Date.now()+'_'+idx, text: t && t.text ? String(t.text) : '', done: !!(t && t.done) })) : [];
+            const newList = { id, title, tasks };
+            lists.push(newList);
+            saveState(); renderLists(); closeCodeModal(); openList(id);
+          }catch(e){
+            try{ codeImport.disabled = false; }catch(_){}
+            alert('Ocorreu um erro ao importar.');
+          }
+        });
+      }
       document.addEventListener('keydown', (evt)=>{
         if(evt.key==='Escape'){
           if(isMenuOpen){ hideAppMenu(); }

@@ -140,6 +140,49 @@
 
   </div>
 
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+    import { getDatabase, ref, set, get, child } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBH0WJNRyphdJQ1ydwgh1GYLnOS00wt4oM",
+      authDomain: "to-do-8574b.firebaseapp.com",
+      databaseURL: "https://to-do-8574b-default-rtdb.firebaseio.com",
+      projectId: "to-do-8574b",
+      storageBucket: "to-do-8574b.firebasestorage.app",
+      messagingSenderId: "857849175598",
+      appId: "1:857849175598:web:4664a8ad9b167af85509bf",
+      measurementId: "G-E132M7DYY4"
+    };
+
+    const firebaseApp = initializeApp(firebaseConfig);
+    const firebaseDb = getDatabase(firebaseApp);
+
+    async function shareListToFirebase(code, list){
+      if(!code || !list) throw new Error('Parâmetros inválidos');
+      const normalizedCode = String(code).replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
+      const payload = {
+        title: list.title || 'Lista',
+        tasks: Array.isArray(list.tasks)
+          ? list.tasks.map(t=>({ text: t && t.text ? String(t.text) : '', done: !!(t && t.done) }))
+          : [],
+        updatedAt: Date.now()
+      };
+      await set(ref(firebaseDb, `sharedLists/${normalizedCode}`), payload);
+    }
+
+    async function getListFromFirebase(code){
+      const normalizedCode = String(code).replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
+      const snapshot = await get(child(ref(firebaseDb), `sharedLists/${normalizedCode}`));
+      if(snapshot.exists()){
+        return snapshot.val();
+      }
+      return null;
+    }
+
+    window.firebaseShareList = shareListToFirebase;
+    window.firebaseGetList = getListFromFirebase;
+  </script>
   
   <script src="script.js?v=1.0.1"></script>
 </body>
