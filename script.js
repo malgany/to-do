@@ -231,7 +231,7 @@
           // update chevron direction
           chev.textContent = completedCollapsed ? '▸' : '▾';
           if(completedCollapsed){ completedList.style.display='none'; }
-          else{ completedList.style.display='block'; }
+          else{ completedList.style.display='flex'; }
 
           done.forEach(t=>{
             const node = document.createElement('div'); node.className='task done'; node.dataset.id=t.id;
