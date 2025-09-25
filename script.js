@@ -161,37 +161,43 @@
         try{
           const overlay = composerOverlayEl();
           if(overlay && composerBackdrop && composerBackdrop.classList.contains('show')){
-            overlay.style.marginBottom = bottomInset ? bottomInset + 'px' : '';
+            overlay.style.transform = bottomInset ? `translateY(-${bottomInset}px)` : '';
           }
         }catch(_){ }
         // Create/Rename modal
         try{
           if(modalBackdrop && modalBackdrop.classList.contains('show')){
             const modal = modalBackdrop.querySelector('.modal');
-            if(modal){ modal.style.marginBottom = bottomInset ? bottomInset + 'px' : ''; }
+            if(modal && bottomInset > 0){ 
+              modal.style.marginTop = Math.max(20, 60 - bottomInset * 0.5) + 'px';
+            }
           }
         }catch(_){ }
         // Code modal
         try{
           if(codeBackdrop && codeBackdrop.classList.contains('show')){
             const modal = codeBackdrop.querySelector('.modal');
-            if(modal){ modal.style.marginBottom = bottomInset ? bottomInset + 'px' : ''; }
+            if(modal && bottomInset > 0){ 
+              modal.style.marginTop = Math.max(20, 60 - bottomInset * 0.5) + 'px';
+            }
           }
         }catch(_){ }
         // Share dialog
         try{
           if(shareBackdrop && shareBackdrop.classList.contains('show')){
             const dialog = shareBackdrop.querySelector('.share-dialog');
-            if(dialog){ dialog.style.marginBottom = bottomInset ? bottomInset + 'px' : ''; }
+            if(dialog && bottomInset > 0){ 
+              dialog.style.marginTop = Math.max(20, 60 - bottomInset * 0.5) + 'px';
+            }
           }
         }catch(_){ }
       }
 
       function clearKeyboardInset(){
-        try{ const overlay = composerOverlayEl(); if(overlay){ overlay.style.marginBottom = ''; } }catch(_){ }
-        try{ const m = modalBackdrop && modalBackdrop.querySelector('.modal'); if(m){ m.style.marginBottom=''; } }catch(_){ }
-        try{ const m = codeBackdrop && codeBackdrop.querySelector('.modal'); if(m){ m.style.marginBottom=''; } }catch(_){ }
-        try{ const d = shareBackdrop && shareBackdrop.querySelector('.share-dialog'); if(d){ d.style.marginBottom=''; } }catch(_){ }
+        try{ const overlay = composerOverlayEl(); if(overlay){ overlay.style.transform = ''; } }catch(_){ }
+        try{ const m = modalBackdrop && modalBackdrop.querySelector('.modal'); if(m){ m.style.marginTop='60px'; } }catch(_){ }
+        try{ const m = codeBackdrop && codeBackdrop.querySelector('.modal'); if(m){ m.style.marginTop='60px'; } }catch(_){ }
+        try{ const d = shareBackdrop && shareBackdrop.querySelector('.share-dialog'); if(d){ d.style.marginTop='60px'; } }catch(_){ }
       }
 
       // listen to viewport changes to re-apply inset while keyboard animates

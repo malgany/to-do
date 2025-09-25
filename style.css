@@ -185,9 +185,9 @@
     }
 
     /* modal */
-    .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:none;align-items:center;justify-content:center;padding:20px;z-index:70}
+    .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:none;align-items:flex-start;justify-content:center;padding:20px;z-index:70}
     .modal-backdrop.show{display:flex}
-    .modal{width:100%;max-width:520px;background:#fff;padding:18px;border-radius:12px; width: 330px;}
+    .modal{width:100%;max-width:520px;background:#fff;padding:18px;border-radius:12px;width:330px;margin-top:60px;}
     .modal h3{font-size:16px;margin-bottom:12px}
     .modal .modal-body{display:flex;flex-direction:column;gap:16px}
     .modal input{padding:12px;border-radius:8px;border:1px solid #ddd;font-size:16px}
@@ -198,12 +198,12 @@
     .code-inputs .code-input{width:40px;height:48px;text-align:center;font-size:22px;border:1px solid #ddd;border-radius:8px}
     .code-gap{display:inline-block}
 
-    .share-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:none;align-items:center;justify-content:center;padding:20px;z-index:60}
+    .share-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:none;align-items:flex-start;justify-content:center;padding:20px;z-index:60}
     /* app menu backdrop (three-dots) */
     .menu-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:none;z-index:45}
     .menu-backdrop.show{display:block}
     .share-backdrop.show{display:flex}
-    .share-dialog{width:100%;max-width:360px;background:#fff;padding:18px;border-radius:12px;display:flex;flex-direction:column;gap:14px;align-items:stretch;text-align:center}
+    .share-dialog{width:100%;max-width:360px;background:#fff;padding:18px;border-radius:12px;display:flex;flex-direction:column;gap:14px;align-items:stretch;text-align:center;margin-top:60px;}
     .share-title{font-size:16px;font-weight:600}
     .share-instructions{color:#555;font-size:14px}
     .share-code-row{display:flex;align-items:center;justify-content:center;gap:12px}
