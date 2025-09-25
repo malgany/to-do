@@ -5,6 +5,7 @@
       let currentTaskId = null;
       let completedCollapsed = false;
       const el = id=>document.getElementById(id);
+      const SVG_NS = 'http://www.w3.org/2000/svg';
 
       // Elements
       const screenLists = el('screenLists');
@@ -101,6 +102,34 @@
       function saveState(){ localStorage.setItem('todo_lists_v3', JSON.stringify(lists)); }
       function loadState(){ try{ const raw = localStorage.getItem('todo_lists_v3'); if(raw){ lists = JSON.parse(raw); } }catch(e){ lists = []; } }
 
+      function createListIconSvg(){
+        const svg = document.createElementNS(SVG_NS, 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('aria-hidden', 'true');
+        svg.setAttribute('focusable', 'false');
+
+        [6, 12, 18].forEach((y)=>{
+          const bullet = document.createElementNS(SVG_NS, 'circle');
+          bullet.setAttribute('cx', '5');
+          bullet.setAttribute('cy', String(y));
+          bullet.setAttribute('r', '1.8');
+          bullet.setAttribute('fill', '#000');
+          svg.appendChild(bullet);
+
+          const line = document.createElementNS(SVG_NS, 'line');
+          line.setAttribute('x1', '9');
+          line.setAttribute('y1', String(y));
+          line.setAttribute('x2', '19');
+          line.setAttribute('y2', String(y));
+          line.setAttribute('stroke', '#000');
+          line.setAttribute('stroke-width', '2');
+          line.setAttribute('stroke-linecap', 'round');
+          svg.appendChild(line);
+        });
+
+        return svg;
+      }
+
       function renderLists(){
         listsContainer.innerHTML='';
         if(lists.length===0){
@@ -114,10 +143,22 @@
           card.addEventListener('click', ()=>openList(l.id));
           card.addEventListener('keydown', (e)=>{ if(e.key==='Enter') openList(l.id) });
 
-          const ico = document.createElement('div'); ico.className='list-icon'; ico.textContent='L';
-          const txt = document.createElement('div'); txt.textContent=l.title;
+          const ico = document.createElement('div');
+          ico.className='list-icon';
+          ico.appendChild(createListIconSvg());
+          const txt = document.createElement('div'); txt.className='list-title'; txt.textContent=l.title;
+          const incompleteCount = Array.isArray(l.tasks)
+            ? l.tasks.reduce((total, task)=> total + (task && task.done ? 0 : 1), 0)
+            : 0;
 
-          card.appendChild(ico); card.appendChild(txt);
+          card.appendChild(ico);
+          card.appendChild(txt);
+
+          if(incompleteCount>0){
+            const countEl = document.createElement('div'); countEl.className='list-counter'; countEl.textContent = incompleteCount;
+            card.appendChild(countEl);
+          }
+
           listsContainer.appendChild(card);
         });
       }
@@ -297,7 +338,7 @@
         const list = lists.find(x=>x.id===currentListId); if(!list) return;
         // add to top of active tasks
         list.tasks.unshift({id:'t_'+Date.now(), text, done:false});
-        composerInput.value=''; sendTask.disabled=true; saveState(); renderTasks();
+        composerInput.value=''; sendTask.disabled=true; saveState(); renderTasks(); renderLists();
         // keep composer open and keep keyboard up by focusing again quickly
         setTimeout(()=>composerInput.focus(),40);
       }
