@@ -31,6 +31,7 @@
       const shareCopyBtn = el('shareCopyBtn');
       const shareCopyFeedback = el('shareCopyFeedback');
       const shareCloseBtn = el('shareCloseBtn');
+      const resetAppAction = el('resetAppAction');
       const globalBackBtn = el('globalBackBtn');
       const DEFAULT_TITLE = appTitle.textContent;
       const openComposer = el('openComposer');
@@ -217,6 +218,40 @@
           shareCopyFeedback.classList.remove('error');
           copyFeedbackTimer=null;
         }, 2000);
+      }
+
+      async function resetApp(){
+        try{
+          // Unregister all service workers
+          if('serviceWorker' in navigator){
+            const regs = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(regs.map(r=>r.unregister()));
+          }
+          // Clear caches
+          if('caches' in window){
+            const keys = await caches.keys();
+            await Promise.all(keys.map(k=>caches.delete(k)));
+          }
+          // Clear local storage/state
+          try { localStorage.clear(); } catch(e){}
+          try { sessionStorage.clear(); } catch(e){}
+          // Clear IndexedDB (best-effort)
+          if('indexedDB' in window && indexedDB.databases){
+            try{
+              const dbs = await indexedDB.databases();
+              await Promise.all((dbs||[]).map(db => {
+                if(db && db.name){
+                  return new Promise((resolve)=>{
+                    const req = indexedDB.deleteDatabase(db.name);
+                    req.onsuccess = req.onerror = req.onblocked = ()=>resolve();
+                  });
+                }
+              }));
+            }catch(e){ /* ignore */ }
+          }
+        } finally {
+          location.reload();
+        }
       }
 
       async function attemptCopyShareCode(){
@@ -600,6 +635,13 @@
 
       appMenuBtn.addEventListener('click', toggleAppMenu);
       shareListAction.addEventListener('click', ()=>{ hideAppMenu(); openShareDialog(); });
+      if(resetAppAction){
+        resetAppAction.addEventListener('click', async ()=>{
+          hideAppMenu();
+          const confirmReset = confirm('Isso limpará todos os dados locais e recarregará o app. Continuar?');
+          if(confirmReset){ await resetApp(); }
+        });
+      }
       shareCopyBtn.addEventListener('click', attemptCopyShareCode);
       shareCloseBtn.addEventListener('click', closeShareDialog);
       shareBackdrop.addEventListener('click', (evt)=>{ if(evt.target===shareBackdrop) closeShareDialog(); });
@@ -651,8 +693,10 @@
       // Keep saving on unload
       window.addEventListener('beforeunload', saveState);
 
-      // Register service worker for offline support
-      if('serviceWorker' in navigator){
+      // Register service worker for offline support (only https or localhost)
+      const isLocalhost = (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+      const isSecureContext = (location.protocol === 'https:' || isLocalhost);
+      if('serviceWorker' in navigator && isSecureContext){
         window.addEventListener('load', ()=>{
           navigator.serviceWorker.register('service-worker.js').catch((err)=>{
             console.error('Service worker registration failed', err);
