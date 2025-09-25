@@ -144,7 +144,7 @@
 
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
-    import { getDatabase, ref, set, get, child, remove } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
+    import { getDatabase, ref, set, get, child, remove, onValue, off } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
 
     const firebaseConfig = {
       apiKey: "AIzaSyBH0WJNRyphdJQ1ydwgh1GYLnOS00wt4oM",
@@ -188,9 +188,35 @@
       await remove(ref(firebaseDb, `sharedLists/${normalizedCode}`));
     }
 
+    const activeSubscriptions = Object.create(null);
+
+    function subscribeToList(code, handler){
+      const normalizedCode = String(code).replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
+      if(!normalizedCode || normalizedCode.length!==6) return;
+      const pathRef = ref(firebaseDb, `sharedLists/${normalizedCode}`);
+      const listener = (snapshot)=>{
+        if(typeof handler === 'function'){
+          handler(snapshot.exists() ? snapshot.val() : null);
+        }
+      };
+      onValue(pathRef, listener);
+      activeSubscriptions[normalizedCode] = { ref: pathRef, listener };
+    }
+
+    function unsubscribeFromList(code){
+      const normalizedCode = String(code).replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
+      const sub = activeSubscriptions[normalizedCode];
+      if(sub){
+        off(sub.ref, 'value', sub.listener);
+        delete activeSubscriptions[normalizedCode];
+      }
+    }
+
     window.firebaseShareList = shareListToFirebase;
     window.firebaseGetList = getListFromFirebase;
     window.firebaseDeleteList = deleteListFromFirebase;
+    window.firebaseSubscribe = subscribeToList;
+    window.firebaseUnsubscribe = unsubscribeFromList;
   </script>
   
   <script src="script.js?v=1.0.1"></script>

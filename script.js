@@ -65,13 +65,12 @@
       let pendingSharedCode = null;
       // Sync helpers
       let syncTimers = Object.create(null);
+      let liveSubscriptions = Object.create(null);
 
       function canSyncList(list){
         if(!list) return false;
-        if(list.imported) return false; // listas importadas são somente leitura
         const code = String(list.shareCode||'').replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
         if(!code || code.length!==6) return false;
-        if(!list.shareCreated) return false; // só sincroniza se já foi compartilhada por este usuário
         return (typeof window !== 'undefined' && typeof window.firebaseShareList === 'function');
       }
 
@@ -84,10 +83,53 @@
           syncTimers[listId] = setTimeout(async ()=>{
             try{
               const code = String(list.shareCode||'').replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
+              list._lastPushedAt = Date.now();
               await window.firebaseShareList(code, { title: list.title, tasks: list.tasks });
             }catch(e){ /* ignore sync errors */ }
             finally{ syncTimers[listId] = null; }
           }, wait);
+        }catch(_){ }
+      }
+
+      function startRealtimeForList(listId){
+        try{
+          const list = lists.find(x=>x.id===listId);
+          if(!list) return;
+          const code = String(list.shareCode||'').replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
+          if(!code || code.length!==6) return;
+          if(!window || typeof window.firebaseSubscribe !== 'function') return;
+          if(liveSubscriptions[listId]) return; // já inscrito
+          window.firebaseSubscribe(code, (remote)=>{
+            if(!remote) return;
+            const pushedAt = list._lastPushedAt || 0;
+            const remoteAt = (remote && remote.updatedAt) ? Number(remote.updatedAt) : 0;
+            if(remoteAt && pushedAt && Math.abs(remoteAt - remoteAt) < 600){ return; }
+            const newTitle = remote.title || 'Lista';
+            const newTasks = Array.isArray(remote.tasks)
+              ? remote.tasks.map((t, idx)=>({ id: 't_'+Date.now()+'_'+idx, text: t && t.text ? String(t.text) : '', done: !!(t && t.done) }))
+              : [];
+            list.title = newTitle;
+            list.tasks = newTasks;
+            saveState();
+            renderLists();
+            if(currentListId === list.id){
+              currentListName.textContent = list.title;
+              renderTasks();
+              updateAppBar(screenListDetail.classList.contains('active') ? screenListDetail : screenLists);
+            }
+          });
+          liveSubscriptions[listId] = code;
+        }catch(_){ }
+      }
+
+      function stopRealtimeForList(listId){
+        try{
+          const code = liveSubscriptions[listId];
+          if(!code) return;
+          if(window && typeof window.firebaseUnsubscribe === 'function'){
+            window.firebaseUnsubscribe(code);
+          }
+          delete liveSubscriptions[listId];
         }catch(_){ }
       }
 
@@ -233,6 +275,7 @@
           activeShareCode = generateShareCode();
           if(list){ list.shareCode = activeShareCode; saveState(); }
           pendingSharedCode = activeShareCode; // indica primeira criação
+          if(list){ startRealtimeForList(list.id); }
         }
         shareCodeValue.textContent = formatDisplayCode(activeShareCode);
         shareCopyFeedback.textContent='';
@@ -312,6 +355,7 @@
             await window.firebaseShareList(activeShareCode, { title: list.title, tasks: list.tasks });
             list.shareCreated = true;
             saveState();
+            startRealtimeForList(list.id);
           }
         }catch(err){
           sharedOk = false;
@@ -604,7 +648,7 @@
         const list = lists.find(x=>x.id===currentListId); if(!list) return;
         const idx = list.tasks.findIndex(t=>t.id===taskId); if(idx===-1) return;
         list.tasks.splice(idx,1);
-        saveState(); renderTasks(); renderLists();
+        saveState(); renderTasks(); renderLists(); requestSync(list.id);
       }
 
       function attachSwipeToDelete(node, taskId){
@@ -766,12 +810,13 @@
         const list = lists[idx];
         // tentativa de exclusão remota (best-effort)
         try{
-          if(list && list.shareCode && list.shareCreated && typeof window !== 'undefined' && typeof window.firebaseDeleteList === 'function'){
+          if(list && list.shareCode && !list.imported && typeof window !== 'undefined' && typeof window.firebaseDeleteList === 'function'){
             const code = String(list.shareCode).replace(/[^0-9A-Z]/gi,'').toUpperCase();
             if(code.length===6){ await window.firebaseDeleteList(code); }
           }
         }catch(e){ }
         // exclusão local
+        stopRealtimeForList(list.id);
         lists.splice(idx,1);
         saveState();
         currentTaskId = null;
@@ -849,8 +894,9 @@
             const newList = { id, title, tasks, shareCode: normalized, imported: true };
             lists.push(newList);
             saveState(); renderLists(); closeCodeModal(); openList(id);
+            startRealtimeForList(id);
           }catch(e){
-            try{ codeImport.disabled = false; }catch(_){}
+            try{ codeImport.disabled = false; }catch(_){ }
             alert('Ocorreu um erro ao importar.');
           }
         });
@@ -869,6 +915,7 @@
       loadState();
       renderLists();
       updateAppBar(screenLists);
+      try{ (lists||[]).forEach(l=>{ if(l && l.shareCode && String(l.shareCode).replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6).length===6){ startRealtimeForList(l.id); } }); }catch(_){ }
 
       // Keep saving on unload
       window.addEventListener('beforeunload', saveState);
