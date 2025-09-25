@@ -106,6 +106,13 @@
           appTitle.textContent = '';
           btnNewList.hidden = true;
           setAppMenuVisibility(true);
+          const list = lists.find(x=>x.id===currentListId);
+          if(shareListAction){
+            const isImported = !!(list && list.imported);
+            shareListAction.disabled = isImported;
+            if(isImported){ shareListAction.title = 'Não é possível compartilhar listas importadas'; }
+            else { shareListAction.title = ''; }
+          }
         } else if(activeScreen===screenTaskDetail){
           globalBackBtn.hidden = false;
           globalBackBtn.onclick = handleBackToList;
@@ -191,6 +198,7 @@
       function openShareDialog(){
         if(!currentListId) return;
         const list = lists.find(x=>x.id===currentListId);
+        if(list && list.imported){ return; }
         if(list && list.shareCode){
           activeShareCode = String(list.shareCode).replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
           pendingSharedCode = null; // já existe código, não criar/atualizar remoto
@@ -731,7 +739,7 @@
         const list = lists[idx];
         // tentativa de exclusão remota (best-effort)
         try{
-          if(list && list.shareCode && typeof window !== 'undefined' && typeof window.firebaseDeleteList === 'function'){
+          if(list && list.shareCode && list.shareCreated && typeof window !== 'undefined' && typeof window.firebaseDeleteList === 'function'){
             const code = String(list.shareCode).replace(/[^0-9A-Z]/gi,'').toUpperCase();
             if(code.length===6){ await window.firebaseDeleteList(code); }
           }
@@ -811,7 +819,7 @@
             const id = 'l_'+Date.now();
             const title = remote.title || 'Lista Importada';
             const tasks = Array.isArray(remote.tasks) ? remote.tasks.map((t, idx)=>({ id: 't_'+Date.now()+'_'+idx, text: t && t.text ? String(t.text) : '', done: !!(t && t.done) })) : [];
-            const newList = { id, title, tasks, shareCode: normalized };
+            const newList = { id, title, tasks, shareCode: normalized, imported: true };
             lists.push(newList);
             saveState(); renderLists(); closeCodeModal(); openList(id);
           }catch(e){
