@@ -21,6 +21,14 @@
       const modalPrimary = el('modalPrimary');
       const currentListName = el('currentListName');
       const appTitle = el('appTitle');
+      const appMenuBtn = el('appMenuBtn');
+      const appMenu = el('appMenu');
+      const shareListAction = el('shareListAction');
+      const shareBackdrop = el('shareBackdrop');
+      const shareCodeValue = el('shareCodeValue');
+      const shareCopyBtn = el('shareCopyBtn');
+      const shareCopyFeedback = el('shareCopyFeedback');
+      const shareCloseBtn = el('shareCloseBtn');
       const globalBackBtn = el('globalBackBtn');
       const DEFAULT_TITLE = appTitle.textContent;
       const openComposer = el('openComposer');
@@ -35,12 +43,20 @@
       const completedCount = el('completedCount');
       const chev = el('chev');
       const rootEl = document.documentElement;
+      const listCodeToggle = el('listCodeToggle');
+      const codeToggleContainer = el('codeToggleContainer');
 
       const taskDetailRow = el('taskDetailRow');
       const taskDetailCheckbox = el('taskDetailCheckbox');
       const taskDetailText = el('taskDetailText');
 
       // helpers
+      let isMenuOpen = false;
+      let activeShareCode = '';
+      let copyFeedbackTimer = null;
+      let codeModeActive = false;
+      let pendingSharedCode = null;
+
       function lockScroll(){
         rootEl.classList.add('scroll-lock');
         document.body.classList.add('scroll-lock');
@@ -57,6 +73,17 @@
         updateAppBar(screen);
       }
 
+      function setAppMenuVisibility(visible){
+        if(!visible){
+          hideAppMenu();
+          appMenuBtn.hidden = true;
+          appMenuBtn.style.display = 'none';
+          return;
+        }
+        appMenuBtn.hidden = false;
+        appMenuBtn.style.display = 'inline-flex';
+      }
+
       function updateAppBar(activeScreen){
         if(activeScreen===screenLists){
           globalBackBtn.hidden = true;
@@ -64,12 +91,14 @@
           appTitle.hidden = false;
           appTitle.textContent = DEFAULT_TITLE;
           btnNewList.hidden = false;
+          setAppMenuVisibility(false);
         } else if(activeScreen===screenListDetail){
           globalBackBtn.hidden = false;
           globalBackBtn.onclick = handleBackToMain;
           appTitle.hidden = true;
           appTitle.textContent = '';
           btnNewList.hidden = true;
+          setAppMenuVisibility(true);
         } else if(activeScreen===screenTaskDetail){
           globalBackBtn.hidden = false;
           globalBackBtn.onclick = handleBackToList;
@@ -82,6 +111,7 @@
             appTitle.textContent = '';
           }
           btnNewList.hidden = true;
+          setAppMenuVisibility(false);
         }
       }
 
@@ -101,6 +131,154 @@
 
       function saveState(){ localStorage.setItem('todo_lists_v3', JSON.stringify(lists)); }
       function loadState(){ try{ const raw = localStorage.getItem('todo_lists_v3'); if(raw){ lists = JSON.parse(raw); } }catch(e){ lists = []; } }
+
+      function hideAppMenu(){
+        if(!isMenuOpen) return;
+        appMenu.hidden = true;
+        appMenuBtn.setAttribute('aria-expanded','false');
+        document.removeEventListener('click', handleOutsideMenuClick, true);
+        document.removeEventListener('keydown', handleMenuKeyDown);
+        isMenuOpen = false;
+      }
+
+      function toggleAppMenu(){
+        if(appMenuBtn.hidden) return;
+        if(isMenuOpen){
+          hideAppMenu();
+        } else {
+          appMenu.hidden = false;
+          appMenuBtn.setAttribute('aria-expanded','true');
+          isMenuOpen = true;
+          document.addEventListener('click', handleOutsideMenuClick, true);
+          document.addEventListener('keydown', handleMenuKeyDown);
+          shareListAction.focus();
+        }
+      }
+
+      function handleOutsideMenuClick(evt){
+        if(!appMenu.contains(evt.target) && evt.target!==appMenuBtn){ hideAppMenu(); }
+      }
+
+      function handleMenuKeyDown(evt){
+        if(evt.key==='Escape'){ hideAppMenu(); appMenuBtn.focus(); }
+      }
+
+      function generateShareCode(){
+        let code='';
+        const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        for(let i=0;i<6;i++){
+          if(Math.random()<0.5){ code += alphabet[Math.floor(Math.random()*alphabet.length)]; }
+          else { code += Math.floor(Math.random()*10); }
+        }
+        return code;
+      }
+
+      function formatDisplayCode(code){
+        const sanitized = (code||'').replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
+        if(sanitized.length<=3) return sanitized;
+        return sanitized.slice(0,3)+' '+sanitized.slice(3);
+      }
+
+      function openShareDialog(){
+        if(!currentListId) return;
+        activeShareCode = generateShareCode();
+        shareCodeValue.textContent = formatDisplayCode(activeShareCode);
+        shareCopyFeedback.textContent='';
+        shareCopyFeedback.classList.remove('error');
+        shareBackdrop.style.display='flex';
+        shareBackdrop.classList.add('show');
+        lockScroll();
+        shareCopyBtn.focus();
+      }
+
+      function closeShareDialog(){
+        shareBackdrop.classList.remove('show');
+        shareBackdrop.style.display='none';
+        shareCopyFeedback.textContent='';
+        shareCopyFeedback.classList.remove('error');
+        activeShareCode='';
+        if(copyFeedbackTimer){ clearTimeout(copyFeedbackTimer); copyFeedbackTimer=null; }
+        unlockScroll();
+      }
+
+      function notifyCopyFeedback(message, isError){
+        shareCopyFeedback.textContent=message;
+        shareCopyFeedback.classList.toggle('error', !!isError);
+        if(copyFeedbackTimer){ clearTimeout(copyFeedbackTimer); }
+        copyFeedbackTimer = setTimeout(()=>{
+          shareCopyFeedback.textContent='';
+          shareCopyFeedback.classList.remove('error');
+          copyFeedbackTimer=null;
+        }, 2000);
+      }
+
+      function attemptCopyShareCode(){
+        if(!activeShareCode) return;
+        const formatted = formatDisplayCode(activeShareCode);
+        if(navigator.clipboard && navigator.clipboard.writeText){
+          navigator.clipboard.writeText(formatted).then(()=>{
+            notifyCopyFeedback('Copiado!', false);
+          }).catch(()=>{
+            legacyCopy(formatted);
+          });
+        } else {
+          legacyCopy(formatted);
+        }
+      }
+
+      function legacyCopy(text){
+        const temp = document.createElement('textarea');
+        temp.style.position='fixed';
+        temp.style.opacity='0';
+        temp.value=text;
+        document.body.appendChild(temp);
+        temp.select();
+        try{ document.execCommand('copy'); notifyCopyFeedback('Copiado!', false); }
+        catch(e){ notifyCopyFeedback('Não foi possível copiar.', true); }
+        document.body.removeChild(temp);
+      }
+
+      function formatCodeInputValue(value){
+        const sanitized = value.replace(/[^0-9a-z]/gi,'').toUpperCase().slice(0,6);
+        if(sanitized.length<=3) return sanitized;
+        return sanitized.slice(0,3)+' '+sanitized.slice(3);
+      }
+
+      function getCodeInputRaw(){
+        return listNameInput.value.replace(/\s+/g,'');
+      }
+
+      function setCodeMode(enabled){
+        const wasCodeMode = codeModeActive;
+        codeModeActive = !!enabled;
+        listNameInput.dataset.codeMode = codeModeActive ? 'true' : 'false';
+        if(codeModeActive){
+          listNameInput.value='';
+          listNameInput.placeholder='Cole o código compartilhado';
+          listNameInput.setAttribute('maxlength','7');
+          listNameInput.setAttribute('inputmode','text');
+          listNameInput.setAttribute('autocapitalize','characters');
+          listNameInput.setAttribute('autocomplete','off');
+          modalPrimary.textContent='Usar código';
+        } else {
+          if(wasCodeMode){ listNameInput.value=''; }
+          listNameInput.placeholder='Nome da lista';
+          listNameInput.removeAttribute('maxlength');
+          listNameInput.removeAttribute('inputmode');
+          listNameInput.removeAttribute('autocapitalize');
+          listNameInput.removeAttribute('autocomplete');
+          const mode = modalBackdrop.dataset.mode;
+          modalPrimary.textContent = mode==='create' ? 'Criar lista' : 'Salvar';
+        }
+        onModalInput();
+      }
+
+      function handleCodeModeSubmit(){
+        const code = getCodeInputRaw();
+        if(code.length!==6) return;
+        pendingSharedCode = code;
+        closeModal();
+      }
 
       function createListIconSvg(){
         const svg = document.createElementNS(SVG_NS, 'svg');
@@ -168,11 +346,15 @@
         modalBackdrop.style.display='flex';
         modalBackdrop.classList.add('show');
         lockScroll();
+        modalBackdrop.dataset.mode = mode;
         if(mode==='create'){
           modalTitle.textContent='Nova Lista';
           modalPrimary.textContent='Criar lista';
           modalPrimary.disabled=true;
           listNameInput.value='';
+          if(codeToggleContainer){ codeToggleContainer.style.display='inline-flex'; }
+          if(listCodeToggle){ listCodeToggle.checked=false; }
+          setCodeMode(false);
         } else {
           modalTitle.textContent='Renomear Lista';
           modalPrimary.textContent='Salvar';
@@ -180,10 +362,12 @@
           listNameInput.value = list ? list.title : '';
           modalPrimary.disabled = listNameInput.value.trim().length===0;
           setTimeout(()=>{ listNameInput.focus(); const len=listNameInput.value.length; listNameInput.setSelectionRange(len,len); },40);
+          if(codeToggleContainer){ codeToggleContainer.style.display='none'; }
+          if(listCodeToggle){ listCodeToggle.checked=false; }
+          setCodeMode(false);
         }
         setTimeout(()=>{ listNameInput.focus(); },50);
         listNameInput.addEventListener('input', onModalInput);
-        modalBackdrop.dataset.mode = mode;
         if(listId) modalBackdrop.dataset.listId = listId; else delete modalBackdrop.dataset.listId;
       }
 
@@ -195,9 +379,28 @@
         unlockScroll();
       }
 
-      function onModalInput(){ modalPrimary.disabled = listNameInput.value.trim().length===0; }
+      function onModalInput(){
+        if(codeModeActive){
+          const formatted = formatCodeInputValue(listNameInput.value);
+          if(listNameInput.value!==formatted){
+            const wasFocused = document.activeElement===listNameInput;
+            listNameInput.value = formatted;
+            if(wasFocused){
+              const len = listNameInput.value.length;
+              listNameInput.setSelectionRange(len,len);
+            }
+          }
+          modalPrimary.disabled = getCodeInputRaw().length!==6;
+        } else {
+          modalPrimary.disabled = listNameInput.value.trim().length===0;
+        }
+      }
 
       function createListFromModal(){
+        if(codeModeActive){
+          handleCodeModeSubmit();
+          return;
+        }
         const title = listNameInput.value.trim(); if(!title) return;
         const id = 'l_'+Date.now();
         const newList = {id, title, tasks:[]};
@@ -399,6 +602,19 @@
       composerBackdrop.addEventListener('click', (e)=>{ if(e.target===composerBackdrop) hideComposer(); });
 
       completedHeader.addEventListener('click', ()=>{ completedCollapsed = !completedCollapsed; renderTasks(); });
+
+      appMenuBtn.addEventListener('click', toggleAppMenu);
+      shareListAction.addEventListener('click', ()=>{ hideAppMenu(); openShareDialog(); });
+      shareCopyBtn.addEventListener('click', attemptCopyShareCode);
+      shareCloseBtn.addEventListener('click', closeShareDialog);
+      shareBackdrop.addEventListener('click', (evt)=>{ if(evt.target===shareBackdrop) closeShareDialog(); });
+      document.addEventListener('keydown', (evt)=>{
+        if(evt.key==='Escape'){
+          if(isMenuOpen){ hideAppMenu(); }
+          if(shareBackdrop.classList.contains('show')){ closeShareDialog(); }
+        }
+      });
+      if(listCodeToggle){ listCodeToggle.addEventListener('change', ()=>{ setCodeMode(listCodeToggle.checked); }); }
 
       // initial load
       loadState();

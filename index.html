@@ -12,13 +12,21 @@
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
   <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="style.css?v=1.0.0" />
+  <link rel="stylesheet" href="style.css?v=1.0.1" />
 </head>
 <body>
   <div id="app" class="frame" role="application">
     <header class="appbar">
-      <button id="globalBackBtn" class="back-btn" type="button" aria-label="Voltar" hidden>←</button>
-      <div class="app-title" id="appTitle">To‑Do</div>
+      <div class="appbar-left">
+        <button id="globalBackBtn" class="back-btn" type="button" aria-label="Voltar" hidden>←</button>
+        <div class="app-title" id="appTitle">To‑Do</div>
+      </div>
+      <div class="appbar-right">
+        <button id="appMenuBtn" class="icon-btn" type="button" aria-label="Mais opções" aria-haspopup="true" aria-expanded="false" hidden>⋮</button>
+        <div id="appMenu" class="app-menu" role="menu" hidden>
+          <button id="shareListAction" class="app-menu-item" type="button" role="menuitem">Compartilhar lista</button>
+        </div>
+      </div>
     </header>
 
     <!-- Screen: Lists -->
@@ -69,11 +77,33 @@
         <h3 id="modalTitle">Nova Lista</h3>
         <div class="modal-body">
           <input id="listNameInput" type="text" placeholder="Nome da lista" aria-label="Nome da lista" />
+          <label id="codeToggleContainer" class="code-toggle">
+            <input id="listCodeToggle" type="checkbox" />
+            <span>Código</span>
+          </label>
         </div>
         <div class="actions">
           <button id="modalCancel" class="btn">Cancelar</button>
           <button id="modalPrimary" class="btn primary" disabled>Criar lista</button>
         </div>
+      </div>
+    </div>
+
+    <!-- Share Code Dialog -->
+    <div id="shareBackdrop" class="share-backdrop" role="dialog" aria-modal="true" style="display:none">
+      <div class="share-dialog" role="document">
+        <h3 class="share-title">Compartilhar Lista</h3>
+        <p class="share-instructions">Compartilhe este código com quem você quiser convidar.</p>
+        <div class="share-code-row">
+          <span id="shareCodeValue" class="share-code" aria-live="polite">ABC 123</span>
+          <button id="shareCopyBtn" class="icon-btn copy-btn" type="button" aria-label="Copiar código">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M8 8h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Zm-2 9V6a1 1 0 0 1 1-1h9" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+          </button>
+        </div>
+        <div id="shareCopyFeedback" class="share-feedback" role="status" aria-live="polite"></div>
+        <button id="shareCloseBtn" class="btn share-close" type="button">Fechar</button>
       </div>
     </div>
 
@@ -91,6 +121,6 @@
   </div>
 
   
-  <script src="script.js?v=1.0.0"></script>
+  <script src="script.js?v=1.0.1"></script>
 </body>
 </html>

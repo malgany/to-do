@@ -32,11 +32,14 @@
     header.appbar{
       display:flex;
       align-items:center;
+      justify-content:space-between;
       gap:12px;
       padding:16px;
       height: 50px;
       border-bottom:1px solid #e9e9e9;
     }
+    .appbar-left{display:flex;align-items:center;gap:12px;flex:1;min-width:0}
+    .appbar-right{position:relative;display:flex;align-items:center;justify-content:flex-end;min-width:36px}
     .back-btn{
       appearance:none;
       border:none;
@@ -56,7 +59,47 @@
     .back-btn[hidden]{display:none}
     .back-btn:hover{background:#f0f0f0}
     .back-btn:focus-visible{outline:2px solid #000}
-    .app-title{font-weight:600;font-size:18px}
+    .app-title{font-weight:600;font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .icon-btn{
+      appearance:none;
+      border:none;
+      background:transparent;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      width:36px;
+      height:36px;
+      border-radius:9px;
+      cursor:pointer;
+      font-size:22px;
+      line-height:1;
+      transition:background .2s ease;
+    }
+    .icon-btn:hover{background:#f0f0f0}
+    .icon-btn:focus-visible{outline:2px solid #000}
+    .app-menu{
+      position:absolute;
+      top:calc(100% + 8px);
+      right:0;
+      background:#fff;
+      border:1px solid #e5e5e5;
+      border-radius:10px;
+      box-shadow:0 10px 30px rgba(0,0,0,0.12);
+      padding:6px 0;
+      min-width:180px;
+      z-index:50;
+    }
+    .app-menu-item{
+      width:100%;
+      padding:10px 16px;
+      text-align:left;
+      background:transparent;
+      border:none;
+      cursor:pointer;
+      font-size:14px;
+    }
+    .app-menu-item:hover{background:#f5f5f5}
+    .app-menu-item:focus-visible{outline:none;background:#eee}
 
     /* screens */
     .screen{display:none;padding:18px;flex:1;overflow:auto}
@@ -138,7 +181,29 @@
     .modal h3{font-size:16px;margin-bottom:12px}
     .modal .modal-body{display:flex;flex-direction:column;gap:16px}
     .modal input{padding:12px;border-radius:8px;border:1px solid #ddd;font-size:16px}
+    .code-toggle{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      font-size:14px;
+      cursor:pointer;
+      user-select:none;
+    }
+    .code-toggle input{width:18px;height:18px}
     .modal .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+
+    .share-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:none;align-items:center;justify-content:center;padding:20px;z-index:60}
+    .share-backdrop.show{display:flex}
+    .share-dialog{width:100%;max-width:360px;background:#fff;padding:18px;border-radius:12px;display:flex;flex-direction:column;gap:14px;align-items:stretch;text-align:center}
+    .share-title{font-size:16px;font-weight:600}
+    .share-instructions{color:#555;font-size:14px}
+    .share-code-row{display:flex;align-items:center;justify-content:center;gap:12px}
+    .share-code{font-weight:700;font-size:28px;letter-spacing:4px}
+    .copy-btn{border:1px solid #000;background:#fff}
+    .copy-btn svg{width:20px;height:20px}
+    .share-feedback{min-height:18px;font-size:13px;color:#007a3d}
+    .share-feedback.error{color:#b00020}
+    .share-close{align-self:center}
 
     /* small screen tweaks */
     @media (max-width:420px){
