@@ -144,6 +144,7 @@
 
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+    import { initializeAppCheck, ReCaptchaV3Provider } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app-check.js';
     import { getDatabase, ref, set, get, child, remove, onValue, off } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
 
     const firebaseConfig = {
@@ -158,6 +159,10 @@
     };
 
     const firebaseApp = initializeApp(firebaseConfig);
+    initializeAppCheck(firebaseApp, {
+      provider: new ReCaptchaV3Provider('6LfoGtUrAAAAAI_hvP9snJSkpCkBjrGgHHWbxcup'),
+      isTokenAutoRefreshEnabled: true,
+    });
     const firebaseDb = getDatabase(firebaseApp);
 
     async function shareListToFirebase(code, list){
