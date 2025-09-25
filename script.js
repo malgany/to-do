@@ -48,6 +48,7 @@
       const completedCount = el('completedCount');
       const chev = el('chev');
       const rootEl = document.documentElement;
+      const composerOverlayEl = ()=> document.querySelector('.composer-overlay');
 
       // Code modal elements
       const codeBackdrop = el('codeBackdrop');
@@ -143,6 +144,63 @@
         rootEl.classList.remove('scroll-lock');
         document.body.classList.remove('scroll-lock');
       }
+
+      // Keyboard avoidance for overlays (modals/composer/share)
+      function getKeyboardBottomInset(){
+        try{
+          const vv = window.visualViewport;
+          if(!vv) return 0;
+          const inset = Math.max(0, window.innerHeight - (vv.height + vv.offsetTop));
+          return Math.max(0, Math.floor(inset));
+        }catch(_){ return 0; }
+      }
+
+      function applyKeyboardInset(){
+        const bottomInset = getKeyboardBottomInset();
+        // Composer (should move with keyboard)
+        try{
+          const overlay = composerOverlayEl();
+          if(overlay && composerBackdrop && composerBackdrop.classList.contains('show')){
+            overlay.style.marginBottom = bottomInset ? bottomInset + 'px' : '';
+          }
+        }catch(_){ }
+        // Create/Rename modal
+        try{
+          if(modalBackdrop && modalBackdrop.classList.contains('show')){
+            const modal = modalBackdrop.querySelector('.modal');
+            if(modal){ modal.style.marginBottom = bottomInset ? bottomInset + 'px' : ''; }
+          }
+        }catch(_){ }
+        // Code modal
+        try{
+          if(codeBackdrop && codeBackdrop.classList.contains('show')){
+            const modal = codeBackdrop.querySelector('.modal');
+            if(modal){ modal.style.marginBottom = bottomInset ? bottomInset + 'px' : ''; }
+          }
+        }catch(_){ }
+        // Share dialog
+        try{
+          if(shareBackdrop && shareBackdrop.classList.contains('show')){
+            const dialog = shareBackdrop.querySelector('.share-dialog');
+            if(dialog){ dialog.style.marginBottom = bottomInset ? bottomInset + 'px' : ''; }
+          }
+        }catch(_){ }
+      }
+
+      function clearKeyboardInset(){
+        try{ const overlay = composerOverlayEl(); if(overlay){ overlay.style.marginBottom = ''; } }catch(_){ }
+        try{ const m = modalBackdrop && modalBackdrop.querySelector('.modal'); if(m){ m.style.marginBottom=''; } }catch(_){ }
+        try{ const m = codeBackdrop && codeBackdrop.querySelector('.modal'); if(m){ m.style.marginBottom=''; } }catch(_){ }
+        try{ const d = shareBackdrop && shareBackdrop.querySelector('.share-dialog'); if(d){ d.style.marginBottom=''; } }catch(_){ }
+      }
+
+      // listen to viewport changes to re-apply inset while keyboard animates
+      try{
+        if(window.visualViewport){
+          window.visualViewport.addEventListener('resize', applyKeyboardInset);
+          window.visualViewport.addEventListener('scroll', applyKeyboardInset);
+        }
+      }catch(_){ }
 
       function showScreen(screen){
         [screenLists, screenListDetail, screenTaskDetail].forEach(s=>s.classList.remove('active'));
@@ -284,6 +342,7 @@
         shareBackdrop.style.display='flex';
         shareBackdrop.classList.add('show');
         lockScroll();
+        applyKeyboardInset();
         shareCopyBtn.focus();
       }
 
@@ -294,6 +353,7 @@
         shareCopyFeedback.classList.remove('error');
         activeShareCode='';
         if(copyFeedbackTimer){ clearTimeout(copyFeedbackTimer); copyFeedbackTimer=null; }
+        clearKeyboardInset();
         unlockScroll();
       }
 
@@ -453,6 +513,7 @@
         modalBackdrop.style.display='flex';
         modalBackdrop.classList.add('show');
         lockScroll();
+        applyKeyboardInset();
         modalBackdrop.dataset.mode = mode;
         if(mode==='create'){
           modalTitle.textContent='Nova Lista';
@@ -477,6 +538,7 @@
         modalBackdrop.style.display='none';
         listNameInput.removeEventListener('input', onModalInput);
         delete modalBackdrop.dataset.mode; delete modalBackdrop.dataset.listId;
+        clearKeyboardInset();
         unlockScroll();
       }
 
@@ -485,6 +547,7 @@
         codeBackdrop.style.display='flex';
         codeBackdrop.classList.add('show');
         lockScroll();
+        applyKeyboardInset();
         // collect inputs on first open
         if(codeInputs.length===0){
           codeInputs = Array.from(codeBackdrop.querySelectorAll('input.code-input'));
@@ -526,6 +589,7 @@
         if(!codeBackdrop) return;
         codeBackdrop.classList.remove('show');
         codeBackdrop.style.display='none';
+        clearKeyboardInset();
         unlockScroll();
       }
 
@@ -744,7 +808,7 @@
         composerBackdrop.classList.add('show');
         composerBackdrop.setAttribute('aria-hidden','false');
         // focus input to open keyboard on mobile
-        setTimeout(()=>{ composerInput.focus(); },60);
+        setTimeout(()=>{ composerInput.focus(); applyKeyboardInset(); },60);
         // change fab text to X
         openComposer.textContent='✕';
       }
@@ -755,6 +819,7 @@
         openComposer.textContent='+';
         // blur input so keyboard hides
         try{ composerInput.blur(); }catch(e){}
+        clearKeyboardInset();
       }
 
       function toggleComposer(){
