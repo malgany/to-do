@@ -1,17 +1,19 @@
 /* Reset */
     *{box-sizing:border-box;margin:0;padding:0}
-    html,body,#app{height:100%}
+    html,body,#app{height:100%;min-height:100vh;min-height:100dvh}
     body{
       font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
       background:#f6f6f6; /* light gray so white stands out */
       color:#000;
       -webkit-font-smoothing:antialiased;
       -moz-osx-font-smoothing:grayscale;
-      padding:16px;
       display:flex;
       align-items:flex-start;
       justify-content:center;
     }
+
+    html.scroll-lock,
+    body.scroll-lock{overflow:hidden}
 
     /* App shell */
     .frame{
@@ -127,7 +129,7 @@
 
     /* small screen tweaks */
     @media (max-width:420px){
-      .frame{border-radius:12px;min-height:100vh}
+      .frame{border-radius:12px;min-height:100vh;min-height:100dvh}
       .fab{right:14px;bottom:14px}
       .new-list-btn{left:14px;bottom:14px}
     }

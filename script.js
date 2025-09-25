@@ -33,12 +33,23 @@
       const completedList = el('completedList');
       const completedCount = el('completedCount');
       const chev = el('chev');
+      const rootEl = document.documentElement;
 
       const taskDetailRow = el('taskDetailRow');
       const taskDetailCheckbox = el('taskDetailCheckbox');
       const taskDetailText = el('taskDetailText');
 
       // helpers
+      function lockScroll(){
+        rootEl.classList.add('scroll-lock');
+        document.body.classList.add('scroll-lock');
+      }
+
+      function unlockScroll(){
+        rootEl.classList.remove('scroll-lock');
+        document.body.classList.remove('scroll-lock');
+      }
+
       function showScreen(screen){
         [screenLists, screenListDetail, screenTaskDetail].forEach(s=>s.classList.remove('active'));
         screen.classList.add('active');
@@ -115,6 +126,7 @@
         // mode: 'create' or 'rename'
         modalBackdrop.style.display='flex';
         modalBackdrop.classList.add('show');
+        lockScroll();
         if(mode==='create'){
           modalTitle.textContent='Nova Lista';
           modalPrimary.textContent='Criar lista';
@@ -139,6 +151,7 @@
         modalBackdrop.style.display='none';
         listNameInput.removeEventListener('input', onModalInput);
         delete modalBackdrop.dataset.mode; delete modalBackdrop.dataset.listId;
+        unlockScroll();
       }
 
       function onModalInput(){ modalPrimary.disabled = listNameInput.value.trim().length===0; }
