@@ -49,6 +49,7 @@
       border-radius:9px;
       transition:background .2s ease;
     }
+    .back-btn[hidden]{display:none}
     .back-btn:hover{background:#f0f0f0}
     .back-btn:focus-visible{outline:2px solid #000}
     .app-title{font-weight:600;font-size:18px}
@@ -88,7 +89,7 @@
     @keyframes pop{0%{transform:scale(1)}50%{transform:scale(.82) rotate(-8deg)}100%{transform:scale(1)} }
 
     /* completed section header */
-    .completed-header{margin-top:10px;display:flex;align-items:center;gap:8px;cursor:pointer;color:#2b6cb0}
+    .completed-header{margin-top:10px;display:flex;align-items:center;gap:8px;cursor:pointer;color:#000}
     .completed-header .count{font-weight:700;margin-left:6px;color:#000}
 
     /* floating add button (right) */

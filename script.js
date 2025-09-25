@@ -51,11 +51,13 @@
           globalBackBtn.onclick = null;
           appTitle.hidden = false;
           appTitle.textContent = DEFAULT_TITLE;
+          btnNewList.hidden = false;
         } else if(activeScreen===screenListDetail){
           globalBackBtn.hidden = false;
           globalBackBtn.onclick = handleBackToMain;
           appTitle.hidden = true;
           appTitle.textContent = '';
+          btnNewList.hidden = true;
         } else if(activeScreen===screenTaskDetail){
           globalBackBtn.hidden = false;
           globalBackBtn.onclick = handleBackToList;
@@ -67,6 +69,7 @@
             appTitle.hidden = true;
             appTitle.textContent = '';
           }
+          btnNewList.hidden = true;
         }
       }
 
