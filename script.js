@@ -848,12 +848,19 @@
           task.text = '';
         } else {
           task.text = raw;
-          lastValidTaskText = raw;
         }
         saveState(); renderLists(); renderTasks();
       });
 
-      taskDetailText.addEventListener('focus', ()=>{});
+      taskDetailText.addEventListener('focus', ()=>{
+        try{
+          if(!currentListId || !currentTaskId) return;
+          const list = lists.find(x=>x.id===currentListId); if(!list) return;
+          const task = list.tasks.find(t=>t.id===currentTaskId); if(!task) return;
+          // snapshot do valor no momento do foco
+          lastValidTaskText = task.text || '';
+        }catch(_){ }
+      });
 
       taskDetailText.addEventListener('blur', ()=>{
         // não permitir salvar vazio; restaurar último título válido
