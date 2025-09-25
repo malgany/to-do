@@ -28,12 +28,14 @@
         </div>
       </div>
     </header>
+    <div id="menuBackdrop" class="menu-backdrop" aria-hidden="true" style="display:none"></div>
 
     <!-- Screen: Lists -->
     <main id="screenLists" class="screen active" aria-label="Listas">
       <div class="lists" id="listsContainer">
         <div class="centered-empty" id="noLists">Nenhuma lista criada. Toque em "Nova Lista" para começar.</div>
       </div>
+      <button id="btnImportCode" class="code-btn" aria-haspopup="dialog"><span class="icon">+</span><span>Código</span></button>
       <button id="btnNewList" class="new-list-btn" aria-haspopup="dialog"><span class="icon">+</span><span>Nova Lista</span></button>
     </main>
 
@@ -77,14 +79,32 @@
         <h3 id="modalTitle">Nova Lista</h3>
         <div class="modal-body">
           <input id="listNameInput" type="text" placeholder="Nome da lista" aria-label="Nome da lista" />
-          <label id="codeToggleContainer" class="code-toggle">
-            <input id="listCodeToggle" type="checkbox" />
-            <span>Código</span>
-          </label>
         </div>
         <div class="actions">
           <button id="modalCancel" class="btn">Cancelar</button>
           <button id="modalPrimary" class="btn primary" disabled>Criar lista</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Code Import Modal -->
+    <div id="codeBackdrop" class="modal-backdrop" role="dialog" aria-modal="true" style="display:none">
+      <div class="modal" role="document">
+        <h3 id="codeModalTitle">Código</h3>
+        <div class="modal-body">
+          <div class="code-inputs" role="group" aria-label="Código de 6 dígitos">
+            <input class="code-input" inputmode="latin" autocomplete="one-time-code" aria-label="Dígito 1" maxlength="1" />
+            <input class="code-input" inputmode="latin" autocomplete="one-time-code" aria-label="Dígito 2" maxlength="1" />
+            <input class="code-input" inputmode="latin" autocomplete="one-time-code" aria-label="Dígito 3" maxlength="1" />
+            <span class="code-gap" aria-hidden="true" style="width:10px"></span>
+            <input class="code-input" inputmode="latin" autocomplete="one-time-code" aria-label="Dígito 4" maxlength="1" />
+            <input class="code-input" inputmode="latin" autocomplete="one-time-code" aria-label="Dígito 5" maxlength="1" />
+            <input class="code-input" inputmode="latin" autocomplete="one-time-code" aria-label="Dígito 6" maxlength="1" />
+          </div>
+        </div>
+        <div class="actions">
+          <button id="codeCancel" class="btn">Cancelar</button>
+          <button id="codeImport" class="btn primary">Importar lista</button>
         </div>
       </div>
     </div>

@@ -151,6 +151,12 @@
     }
     .new-list-btn .icon{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:4px;font-size:16px}
 
+    /* Import Code button (above new list) */
+    .code-btn{
+      position:fixed;left:22px;bottom:88px;display:inline-flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:#fff;color:#000;border:2px solid #000;font-weight:700;cursor:pointer;z-index:30
+    }
+    .code-btn .icon{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:4px;font-size:14px}
+
     /* composer overlay (floating above content, attached to bottom/keyboard) */
     .composer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.45);display:none;align-items:flex-end;justify-content:center;z-index:40}
     .composer-backdrop.show{display:flex}
@@ -175,24 +181,23 @@
     }
 
     /* modal */
-    .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:none;align-items:center;justify-content:center;padding:20px}
+    .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:none;align-items:center;justify-content:center;padding:20px;z-index:70}
     .modal-backdrop.show{display:flex}
     .modal{width:100%;max-width:520px;background:#fff;padding:18px;border-radius:12px}
     .modal h3{font-size:16px;margin-bottom:12px}
     .modal .modal-body{display:flex;flex-direction:column;gap:16px}
     .modal input{padding:12px;border-radius:8px;border:1px solid #ddd;font-size:16px}
-    .code-toggle{
-      display:inline-flex;
-      align-items:center;
-      gap:8px;
-      font-size:14px;
-      cursor:pointer;
-      user-select:none;
-    }
-    .code-toggle input{width:18px;height:18px}
     .modal .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
 
+    /* code modal */
+    .code-inputs{display:flex;align-items:center;justify-content:center;gap:8px}
+    .code-inputs .code-input{width:40px;height:48px;text-align:center;font-size:22px;border:1px solid #ddd;border-radius:8px}
+    .code-gap{display:inline-block}
+
     .share-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:none;align-items:center;justify-content:center;padding:20px;z-index:60}
+    /* app menu backdrop (three-dots) */
+    .menu-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:none;z-index:45}
+    .menu-backdrop.show{display:block}
     .share-backdrop.show{display:flex}
     .share-dialog{width:100%;max-width:360px;background:#fff;padding:18px;border-radius:12px;display:flex;flex-direction:column;gap:14px;align-items:stretch;text-align:center}
     .share-title{font-size:16px;font-weight:600}
@@ -210,4 +215,5 @@
       .frame{border-radius:12px;min-height:100vh;min-height:100dvh}
       .fab{right:14px;bottom:14px}
       .new-list-btn{left:14px;bottom:14px}
+      .code-btn{left:14px;bottom:80px}
     }

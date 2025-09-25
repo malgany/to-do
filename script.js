@@ -14,6 +14,7 @@
       const listsContainer = el('listsContainer');
       const noLists = el('noLists');
       const btnNewList = el('btnNewList');
+      const btnImportCode = el('btnImportCode');
       const modalBackdrop = el('modalBackdrop');
       const modalTitle = el('modalTitle');
       const listNameInput = el('listNameInput');
@@ -23,6 +24,7 @@
       const appTitle = el('appTitle');
       const appMenuBtn = el('appMenuBtn');
       const appMenu = el('appMenu');
+      const menuBackdrop = el('menuBackdrop');
       const shareListAction = el('shareListAction');
       const shareBackdrop = el('shareBackdrop');
       const shareCodeValue = el('shareCodeValue');
@@ -43,8 +45,12 @@
       const completedCount = el('completedCount');
       const chev = el('chev');
       const rootEl = document.documentElement;
-      const listCodeToggle = el('listCodeToggle');
-      const codeToggleContainer = el('codeToggleContainer');
+
+      // Code modal elements
+      const codeBackdrop = el('codeBackdrop');
+      const codeCancel = el('codeCancel');
+      const codeImport = el('codeImport');
+      let codeInputs = [];
 
       const taskDetailRow = el('taskDetailRow');
       const taskDetailCheckbox = el('taskDetailCheckbox');
@@ -54,7 +60,6 @@
       let isMenuOpen = false;
       let activeShareCode = '';
       let copyFeedbackTimer = null;
-      let codeModeActive = false;
       let pendingSharedCode = null;
 
       function lockScroll(){
@@ -136,6 +141,7 @@
         if(!isMenuOpen) return;
         appMenu.hidden = true;
         appMenuBtn.setAttribute('aria-expanded','false');
+        if(menuBackdrop){ menuBackdrop.classList.remove('show'); menuBackdrop.style.display='none'; }
         document.removeEventListener('click', handleOutsideMenuClick, true);
         document.removeEventListener('keydown', handleMenuKeyDown);
         isMenuOpen = false;
@@ -152,6 +158,7 @@
           document.addEventListener('click', handleOutsideMenuClick, true);
           document.addEventListener('keydown', handleMenuKeyDown);
           shareListAction.focus();
+          if(menuBackdrop){ menuBackdrop.style.display='block'; menuBackdrop.classList.add('show'); }
         }
       }
 
@@ -238,48 +245,6 @@
         document.body.removeChild(temp);
       }
 
-      function formatCodeInputValue(value){
-        const sanitized = value.replace(/[^0-9a-z]/gi,'').toUpperCase().slice(0,6);
-        if(sanitized.length<=3) return sanitized;
-        return sanitized.slice(0,3)+' '+sanitized.slice(3);
-      }
-
-      function getCodeInputRaw(){
-        return listNameInput.value.replace(/\s+/g,'');
-      }
-
-      function setCodeMode(enabled){
-        const wasCodeMode = codeModeActive;
-        codeModeActive = !!enabled;
-        listNameInput.dataset.codeMode = codeModeActive ? 'true' : 'false';
-        if(codeModeActive){
-          listNameInput.value='';
-          listNameInput.placeholder='Cole o código compartilhado';
-          listNameInput.setAttribute('maxlength','7');
-          listNameInput.setAttribute('inputmode','text');
-          listNameInput.setAttribute('autocapitalize','characters');
-          listNameInput.setAttribute('autocomplete','off');
-          modalPrimary.textContent='Usar código';
-        } else {
-          if(wasCodeMode){ listNameInput.value=''; }
-          listNameInput.placeholder='Nome da lista';
-          listNameInput.removeAttribute('maxlength');
-          listNameInput.removeAttribute('inputmode');
-          listNameInput.removeAttribute('autocapitalize');
-          listNameInput.removeAttribute('autocomplete');
-          const mode = modalBackdrop.dataset.mode;
-          modalPrimary.textContent = mode==='create' ? 'Criar lista' : 'Salvar';
-        }
-        onModalInput();
-      }
-
-      function handleCodeModeSubmit(){
-        const code = getCodeInputRaw();
-        if(code.length!==6) return;
-        pendingSharedCode = code;
-        closeModal();
-      }
-
       function createListIconSvg(){
         const svg = document.createElementNS(SVG_NS, 'svg');
         svg.setAttribute('viewBox', '0 0 24 24');
@@ -352,9 +317,6 @@
           modalPrimary.textContent='Criar lista';
           modalPrimary.disabled=true;
           listNameInput.value='';
-          if(codeToggleContainer){ codeToggleContainer.style.display='inline-flex'; }
-          if(listCodeToggle){ listCodeToggle.checked=false; }
-          setCodeMode(false);
         } else {
           modalTitle.textContent='Renomear Lista';
           modalPrimary.textContent='Salvar';
@@ -362,9 +324,6 @@
           listNameInput.value = list ? list.title : '';
           modalPrimary.disabled = listNameInput.value.trim().length===0;
           setTimeout(()=>{ listNameInput.focus(); const len=listNameInput.value.length; listNameInput.setSelectionRange(len,len); },40);
-          if(codeToggleContainer){ codeToggleContainer.style.display='none'; }
-          if(listCodeToggle){ listCodeToggle.checked=false; }
-          setCodeMode(false);
         }
         setTimeout(()=>{ listNameInput.focus(); },50);
         listNameInput.addEventListener('input', onModalInput);
@@ -379,28 +338,58 @@
         unlockScroll();
       }
 
-      function onModalInput(){
-        if(codeModeActive){
-          const formatted = formatCodeInputValue(listNameInput.value);
-          if(listNameInput.value!==formatted){
-            const wasFocused = document.activeElement===listNameInput;
-            listNameInput.value = formatted;
-            if(wasFocused){
-              const len = listNameInput.value.length;
-              listNameInput.setSelectionRange(len,len);
-            }
-          }
-          modalPrimary.disabled = getCodeInputRaw().length!==6;
+      function openCodeModal(){
+        if(!codeBackdrop) return;
+        codeBackdrop.style.display='flex';
+        codeBackdrop.classList.add('show');
+        lockScroll();
+        // collect inputs on first open
+        if(codeInputs.length===0){
+          codeInputs = Array.from(codeBackdrop.querySelectorAll('input.code-input'));
+          // attach handlers
+          codeInputs.forEach((input, idx)=>{
+            input.addEventListener('input', (e)=>{
+              const val = input.value.toUpperCase().replace(/[^0-9A-Z]/g,'');
+              input.value = val.slice(0,1);
+              if(val && idx<codeInputs.length-1){ codeInputs[idx+1].focus(); }
+            });
+            input.addEventListener('keydown', (e)=>{
+              if(e.key==='Backspace' && !input.value && idx>0){ codeInputs[idx-1].focus(); }
+              if(e.key==='ArrowLeft' && idx>0){ e.preventDefault(); codeInputs[idx-1].focus(); }
+              if(e.key==='ArrowRight' && idx<codeInputs.length-1){ e.preventDefault(); codeInputs[idx+1].focus(); }
+              if(e.key==='Enter'){ e.preventDefault(); }
+              if(e.key.length===1){
+                // allow typing to replace and jump next
+                input.value = '';
+              }
+            });
+            input.addEventListener('paste', (e)=>{
+              e.preventDefault();
+              const text = (e.clipboardData || window.clipboardData).getData('text') || '';
+              const clean = text.replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
+              for(let i=0;i<codeInputs.length;i++){
+                codeInputs[i].value = clean[i] || '';
+              }
+              const nextIndex = Math.min(clean.length, codeInputs.length-1);
+              codeInputs[nextIndex].focus();
+            });
+          });
         } else {
-          modalPrimary.disabled = listNameInput.value.trim().length===0;
+          codeInputs.forEach(i=>i.value='');
         }
+        setTimeout(()=>{ if(codeInputs[0]) codeInputs[0].focus(); }, 40);
       }
 
+      function closeCodeModal(){
+        if(!codeBackdrop) return;
+        codeBackdrop.classList.remove('show');
+        codeBackdrop.style.display='none';
+        unlockScroll();
+      }
+
+      function onModalInput(){ modalPrimary.disabled = listNameInput.value.trim().length===0; }
+
       function createListFromModal(){
-        if(codeModeActive){
-          handleCodeModeSubmit();
-          return;
-        }
         const title = listNameInput.value.trim(); if(!title) return;
         const id = 'l_'+Date.now();
         const newList = {id, title, tasks:[]};
@@ -584,7 +573,7 @@
       });
 
       // Events
-      btnNewList.addEventListener('click', ()=>openModal('create'));
+      btnNewList.addEventListener('click', ()=>{ if(codeBackdrop && codeBackdrop.classList.contains('show')) closeCodeModal(); openModal('create'); });
       modalCancel.addEventListener('click', ()=>closeModal());
       modalPrimary.addEventListener('click', ()=>{ const mode = modalBackdrop.dataset.mode; if(mode==='create') createListFromModal(); else saveRenameFromModal(); });
       listNameInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter' && !modalPrimary.disabled){ modalPrimary.click(); } });
@@ -608,13 +597,20 @@
       shareCopyBtn.addEventListener('click', attemptCopyShareCode);
       shareCloseBtn.addEventListener('click', closeShareDialog);
       shareBackdrop.addEventListener('click', (evt)=>{ if(evt.target===shareBackdrop) closeShareDialog(); });
+      // code modal bindings
+      if(btnImportCode){ btnImportCode.addEventListener('click', ()=>{ closeModal(); openCodeModal(); }); }
+      if(codeCancel){ codeCancel.addEventListener('click', closeCodeModal); }
+      if(codeBackdrop){ codeBackdrop.addEventListener('click', (evt)=>{ if(evt.target===codeBackdrop) closeCodeModal(); }); }
+      if(codeImport){ codeImport.addEventListener('click', ()=>{/* no-op for now */}); }
       document.addEventListener('keydown', (evt)=>{
         if(evt.key==='Escape'){
           if(isMenuOpen){ hideAppMenu(); }
           if(shareBackdrop.classList.contains('show')){ closeShareDialog(); }
+          if(codeBackdrop && codeBackdrop.classList.contains('show')){ closeCodeModal(); }
         }
       });
-      if(listCodeToggle){ listCodeToggle.addEventListener('change', ()=>{ setCodeMode(listCodeToggle.checked); }); }
+
+      if(menuBackdrop){ menuBackdrop.addEventListener('click', hideAppMenu); }
 
       // initial load
       loadState();
