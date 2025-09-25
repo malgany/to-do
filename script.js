@@ -63,6 +63,33 @@
       let activeShareCode = '';
       let copyFeedbackTimer = null;
       let pendingSharedCode = null;
+      // Sync helpers
+      let syncTimers = Object.create(null);
+
+      function canSyncList(list){
+        if(!list) return false;
+        if(list.imported) return false; // listas importadas são somente leitura
+        const code = String(list.shareCode||'').replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
+        if(!code || code.length!==6) return false;
+        if(!list.shareCreated) return false; // só sincroniza se já foi compartilhada por este usuário
+        return (typeof window !== 'undefined' && typeof window.firebaseShareList === 'function');
+      }
+
+      function requestSync(listId, delayMs){
+        try{
+          const list = lists.find(x=>x.id===listId);
+          if(!canSyncList(list)) return;
+          const wait = typeof delayMs === 'number' ? Math.max(0, delayMs) : 250;
+          if(syncTimers[listId]){ clearTimeout(syncTimers[listId]); }
+          syncTimers[listId] = setTimeout(async ()=>{
+            try{
+              const code = String(list.shareCode||'').replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
+              await window.firebaseShareList(code, { title: list.title, tasks: list.tasks });
+            }catch(e){ /* ignore sync errors */ }
+            finally{ syncTimers[listId] = null; }
+          }, wait);
+        }catch(_){ }
+      }
 
       function lockScroll(){
         rootEl.classList.add('scroll-lock');
@@ -471,6 +498,7 @@
         const id = modalBackdrop.dataset.listId; const title = listNameInput.value.trim(); if(!title) return;
         const list = lists.find(x=>x.id===id); if(list){ list.title = title; }
         saveState(); renderLists(); if(currentListId===id){ currentListName.textContent = title; }
+        if(list){ requestSync(list.id); }
         closeModal();
       }
 
@@ -524,7 +552,6 @@
             // clicking the text opens detail
             txt.addEventListener('click', (ev)=>{ ev.stopPropagation(); openTaskDetail(t.id); });
             node.appendChild(cb); node.appendChild(txt);
-            attachSwipeToDelete(node, t.id);
             tasksContainer.appendChild(node);
           });
         }
@@ -543,7 +570,6 @@
             const txt = document.createElement('div'); txt.className='text'; txt.textContent=t.text;
             txt.addEventListener('click', (ev)=>{ ev.stopPropagation(); openTaskDetail(t.id); });
             node.appendChild(cb); node.appendChild(txt);
-            attachSwipeToDelete(node, t.id);
             completedList.appendChild(node);
           });
         } else {
@@ -565,7 +591,7 @@
         const [task] = list.tasks.splice(idx,1);
         if(task.done) list.tasks.push(task); // completed at end
         else list.tasks.unshift(task); // active to top
-        saveState(); renderTasks(); renderLists();
+        saveState(); renderTasks(); renderLists(); requestSync(list.id);
         // if we're in task detail for this task, update detail checkbox and text style
         if(currentTaskId===taskId && screenTaskDetail.classList.contains('active')){
           if(task.done){ taskDetailCheckbox.classList.add('checked'); taskDetailCheckbox.innerHTML='✓'; }
@@ -691,6 +717,7 @@
         // add to top of active tasks
         list.tasks.unshift({id:'t_'+Date.now(), text, done:false});
         composerInput.value=''; sendTask.disabled=true; saveState(); renderTasks(); renderLists();
+        requestSync(list.id);
         // keep composer open and keep keyboard up by focusing again quickly
         setTimeout(()=>composerInput.focus(),40);
       }
@@ -718,7 +745,7 @@
         const val = taskDetailText.textContent.trim();
         if(val.length===0){ task.text = ''; taskDetailText.classList.add('placeholder'); taskDetailText.textContent = 'Renomear Tarefa'; }
         else { task.text = taskDetailText.textContent; }
-        saveState(); renderLists(); renderTasks();
+        saveState(); renderLists(); renderTasks(); requestSync(list.id);
       });
 
       // task detail checkbox toggle (without leaving screen)
