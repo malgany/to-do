@@ -187,7 +187,7 @@
     /* modal */
     .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:none;align-items:flex-start;justify-content:center;padding:20px;z-index:70}
     .modal-backdrop.show{display:flex}
-    .modal{width:100%;max-width:520px;background:#fff;padding:18px;border-radius:12px;width:330px;margin-top:60px;}
+    .modal{width:100%;max-width:520px;background:#fff;padding:18px;border-radius:12px;width:330px;margin-top:40%;}
     .modal h3{font-size:16px;margin-bottom:12px}
     .modal .modal-body{display:flex;flex-direction:column;gap:16px}
     .modal input{padding:12px;border-radius:8px;border:1px solid #ddd;font-size:16px}
