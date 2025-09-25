@@ -102,8 +102,8 @@
           window.firebaseSubscribe(code, (remote)=>{
             if(!remote) return;
             const pushedAt = list._lastPushedAt || 0;
-            const remoteAt = (remote && remote.updatedAt) ? Number(remote.updatedAt) : 0;
-            if(remoteAt && pushedAt && Math.abs(remoteAt - remoteAt) < 600){ return; }
+          const remoteAt = (remote && remote.updatedAt) ? Number(remote.updatedAt) : 0;
+          if(remoteAt && pushedAt && Math.abs(remoteAt - pushedAt) < 600){ return; }
             const newTitle = remote.title || 'Lista';
             const newTasks = Array.isArray(remote.tasks)
               ? remote.tasks.map((t, idx)=>({ id: 't_'+Date.now()+'_'+idx, text: t && t.text ? String(t.text) : '', done: !!(t && t.done) }))
