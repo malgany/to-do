@@ -32,6 +32,7 @@
       const shareCopyFeedback = el('shareCopyFeedback');
       const shareCloseBtn = el('shareCloseBtn');
       const resetAppAction = el('resetAppAction');
+      const deleteListAction = el('deleteListAction');
       const globalBackBtn = el('globalBackBtn');
       const DEFAULT_TITLE = appTitle.textContent;
       const openComposer = el('openComposer');
@@ -193,6 +194,8 @@
         shareCodeValue.textContent = formatDisplayCode(activeShareCode);
         shareCopyFeedback.textContent='';
         shareCopyFeedback.classList.remove('error');
+        const list = lists.find(x=>x.id===currentListId);
+        if(list){ list.shareCode = activeShareCode; saveState(); }
         shareBackdrop.style.display='flex';
         shareBackdrop.classList.add('show');
         lockScroll();
@@ -613,6 +616,29 @@
         setTimeout(()=>{ taskDetailCheckbox.classList.remove('pop'); toggleTaskDone(currentTaskId, newDone); }, 180);
       });
 
+      async function deleteCurrentList(){
+        if(!currentListId) return;
+        const idx = lists.findIndex(x=>x.id===currentListId);
+        if(idx===-1) return;
+        const list = lists[idx];
+        // tentativa de exclusão remota (best-effort)
+        try{
+          if(list && list.shareCode && typeof window !== 'undefined' && typeof window.firebaseDeleteList === 'function'){
+            const code = String(list.shareCode).replace(/[^0-9A-Z]/gi,'').toUpperCase();
+            if(code.length===6){ await window.firebaseDeleteList(code); }
+          }
+        }catch(e){ }
+        // exclusão local
+        lists.splice(idx,1);
+        saveState();
+        currentTaskId = null;
+        currentListId = null;
+        hideComposer();
+        showScreen(screenLists);
+        renderLists();
+        updateAppBar(screenLists);
+      }
+
       // Events
       btnNewList.addEventListener('click', ()=>{ if(codeBackdrop && codeBackdrop.classList.contains('show')) closeCodeModal(); openModal('create'); });
       modalCancel.addEventListener('click', ()=>closeModal());
@@ -635,6 +661,17 @@
 
       appMenuBtn.addEventListener('click', toggleAppMenu);
       shareListAction.addEventListener('click', ()=>{ hideAppMenu(); openShareDialog(); });
+      if(deleteListAction){
+        deleteListAction.addEventListener('click', async ()=>{
+          hideAppMenu();
+          if(!currentListId) return;
+          const list = lists.find(x=>x.id===currentListId);
+          const title = list ? (list.title || 'esta lista') : 'esta lista';
+          const ok = confirm(`Excluir "${title}"? Essa ação não pode ser desfeita.`);
+          if(!ok) return;
+          await deleteCurrentList();
+        });
+      }
       if(resetAppAction){
         resetAppAction.addEventListener('click', async ()=>{
           hideAppMenu();
@@ -666,7 +703,7 @@
             const id = 'l_'+Date.now();
             const title = remote.title || 'Lista Importada';
             const tasks = Array.isArray(remote.tasks) ? remote.tasks.map((t, idx)=>({ id: 't_'+Date.now()+'_'+idx, text: t && t.text ? String(t.text) : '', done: !!(t && t.done) })) : [];
-            const newList = { id, title, tasks };
+            const newList = { id, title, tasks, shareCode: normalized };
             lists.push(newList);
             saveState(); renderLists(); closeCodeModal(); openList(id);
           }catch(e){

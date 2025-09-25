@@ -26,6 +26,7 @@
         <div id="appMenu" class="app-menu" role="menu" hidden>
           <button id="shareListAction" class="app-menu-item" type="button" role="menuitem">Compartilhar lista</button>
           <button id="resetAppAction" class="app-menu-item" type="button" role="menuitem">Resetar app</button>
+          <button id="deleteListAction" class="app-menu-item" type="button" role="menuitem">Excluir Lista</button>
         </div>
       </div>
     </header>
@@ -143,7 +144,7 @@
 
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
-    import { getDatabase, ref, set, get, child } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
+    import { getDatabase, ref, set, get, child, remove } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
 
     const firebaseConfig = {
       apiKey: "AIzaSyBH0WJNRyphdJQ1ydwgh1GYLnOS00wt4oM",
@@ -181,8 +182,15 @@
       return null;
     }
 
+    async function deleteListFromFirebase(code){
+      const normalizedCode = String(code).replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
+      if(!normalizedCode) return;
+      await remove(ref(firebaseDb, `sharedLists/${normalizedCode}`));
+    }
+
     window.firebaseShareList = shareListToFirebase;
     window.firebaseGetList = getListFromFirebase;
+    window.firebaseDeleteList = deleteListFromFirebase;
   </script>
   
   <script src="script.js?v=1.0.1"></script>
