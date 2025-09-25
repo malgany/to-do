@@ -4,6 +4,7 @@
       let currentListId = null;
       let currentTaskId = null;
       let completedCollapsed = false;
+      let lastValidTaskText = '';
       const el = id=>document.getElementById(id);
       const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -564,14 +565,19 @@
         if(!task) return;
         // populate task
         taskDetailText.textContent = task.text || '';
-        if(!task.text || task.text.trim().length===0){ taskDetailText.classList.add('placeholder'); taskDetailText.textContent = 'Renomear Tarefa'; }
-        else { taskDetailText.classList.remove('placeholder'); }
+        taskDetailText.setAttribute('data-placeholder','Renomear tarefa');
+        lastValidTaskText = task.text || '';
         // checkbox state
         if(task.done){ taskDetailCheckbox.classList.add('checked'); taskDetailCheckbox.innerHTML='✓'; }
         else { taskDetailCheckbox.classList.remove('checked'); taskDetailCheckbox.innerHTML=''; }
         showScreen(screenTaskDetail);
         // focus contenteditable when opening
-        setTimeout(()=>{ taskDetailText.focus(); placeCaretAtEnd(taskDetailText); },120);
+        setTimeout(()=>{ 
+          taskDetailText.focus(); 
+          if(taskDetailText.textContent && taskDetailText.textContent.length>0){ 
+            placeCaretAtEnd(taskDetailText); 
+          }
+        },120);
       }
 
       function placeCaretAtEnd(el){
@@ -771,24 +777,32 @@
         if(!currentListId || !currentTaskId) return;
         const list = lists.find(x=>x.id===currentListId); if(!list) return;
         const task = list.tasks.find(t=>t.id===currentTaskId); if(!task) return;
-        const val = taskDetailText.textContent.trim();
-        if(val.length===0){ task.text = ''; taskDetailText.classList.add('placeholder'); taskDetailText.textContent = 'Renomear Tarefa'; placeCaretAtEnd(taskDetailText); }
-        else { task.text = taskDetailText.textContent; taskDetailText.classList.remove('placeholder'); }
+        const raw = taskDetailText.textContent || '';
+        const trimmed = raw.trim();
+        if(trimmed.length===0){
+          task.text = '';
+        } else {
+          task.text = raw;
+          lastValidTaskText = raw;
+        }
         saveState(); renderLists(); renderTasks();
       });
 
-      taskDetailText.addEventListener('focus', ()=>{
-        if(taskDetailText.classList.contains('placeholder')){ taskDetailText.textContent=''; taskDetailText.classList.remove('placeholder'); }
-      });
+      taskDetailText.addEventListener('focus', ()=>{});
 
       taskDetailText.addEventListener('blur', ()=>{
-        // if empty, keep placeholder but save empty text
+        // não permitir salvar vazio; restaurar último título válido
         if(!currentListId || !currentTaskId) return;
         const list = lists.find(x=>x.id===currentListId); if(!list) return;
         const task = list.tasks.find(t=>t.id===currentTaskId); if(!task) return;
-        const val = taskDetailText.textContent.trim();
-        if(val.length===0){ task.text = ''; taskDetailText.classList.add('placeholder'); taskDetailText.textContent = 'Renomear Tarefa'; }
-        else { task.text = taskDetailText.textContent; }
+        const trimmed = (taskDetailText.textContent || '').trim();
+        if(trimmed.length===0){
+          task.text = lastValidTaskText || '';
+          taskDetailText.textContent = lastValidTaskText || '';
+        } else {
+          task.text = taskDetailText.textContent;
+          lastValidTaskText = task.text;
+        }
         saveState(); renderLists(); renderTasks(); requestSync(list.id);
       });
 

@@ -173,6 +173,9 @@
     .text[contenteditable]{outline:none}
     .placeholder{color:#bbb}
 
+    /* placeholder visual para contenteditable quando vazio */
+    #taskDetailText:empty::before{content:attr(data-placeholder);color:#bbb}
+
     .task-detail-row {
       display: flex;
       align-items: center;
