@@ -129,6 +129,7 @@
     /* tasks */
     .tasks{display:flex;flex-direction:column;gap:4px;margin-top:16px}
     .task{padding:12px;border-radius:10px;border:1px solid #eaeaea;display:flex;align-items:center;gap:12px;background:#fff}
+    .task.swipe-anim{transition:transform .18s ease}
     .task .text{flex:1}
     .task.done .text{text-decoration:line-through;color:#777}
 

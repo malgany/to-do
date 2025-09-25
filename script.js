@@ -190,12 +190,18 @@
 
       function openShareDialog(){
         if(!currentListId) return;
-        activeShareCode = generateShareCode();
+        const list = lists.find(x=>x.id===currentListId);
+        if(list && list.shareCode){
+          activeShareCode = String(list.shareCode).replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
+          pendingSharedCode = null; // já existe código, não criar/atualizar remoto
+        } else {
+          activeShareCode = generateShareCode();
+          if(list){ list.shareCode = activeShareCode; saveState(); }
+          pendingSharedCode = activeShareCode; // indica primeira criação
+        }
         shareCodeValue.textContent = formatDisplayCode(activeShareCode);
         shareCopyFeedback.textContent='';
         shareCopyFeedback.classList.remove('error');
-        const list = lists.find(x=>x.id===currentListId);
-        if(list){ list.shareCode = activeShareCode; saveState(); }
         shareBackdrop.style.display='flex';
         shareBackdrop.classList.add('show');
         lockScroll();
@@ -261,15 +267,27 @@
         if(!activeShareCode) return;
         const formatted = formatDisplayCode(activeShareCode);
         let sharedOk = true;
+        let attemptedRemote = false;
         try{
           const list = lists.find(x=>x.id===currentListId);
-          if(list && typeof window !== 'undefined' && typeof window.firebaseShareList === 'function'){
+          const hasExisting = !!(list && list.shareCreated);
+          const shouldCreate = !!(list && !hasExisting && pendingSharedCode && pendingSharedCode === activeShareCode);
+          if(shouldCreate && typeof window !== 'undefined' && typeof window.firebaseShareList === 'function'){
+            attemptedRemote = true;
             await window.firebaseShareList(activeShareCode, { title: list.title, tasks: list.tasks });
+            list.shareCreated = true;
+            saveState();
           }
         }catch(err){
           sharedOk = false;
         }
-        const onCopyOk = ()=> notifyCopyFeedback(sharedOk ? 'Copiado e compartilhado!' : 'Copiado! (falha ao compartilhar)', !sharedOk);
+        const onCopyOk = ()=> {
+          if(attemptedRemote){
+            notifyCopyFeedback(sharedOk ? 'Copiado e compartilhado!' : 'Copiado! (falha ao compartilhar)', !sharedOk);
+          } else {
+            notifyCopyFeedback('Copiado!', false);
+          }
+        };
         if(navigator.clipboard && navigator.clipboard.writeText){
           navigator.clipboard.writeText(formatted).then(onCopyOk).catch(()=>{ legacyCopy(formatted); });
         } else {
@@ -498,6 +516,7 @@
             // clicking the text opens detail
             txt.addEventListener('click', (ev)=>{ ev.stopPropagation(); openTaskDetail(t.id); });
             node.appendChild(cb); node.appendChild(txt);
+            attachSwipeToDelete(node, t.id);
             tasksContainer.appendChild(node);
           });
         }
@@ -516,6 +535,7 @@
             const txt = document.createElement('div'); txt.className='text'; txt.textContent=t.text;
             txt.addEventListener('click', (ev)=>{ ev.stopPropagation(); openTaskDetail(t.id); });
             node.appendChild(cb); node.appendChild(txt);
+            attachSwipeToDelete(node, t.id);
             completedList.appendChild(node);
           });
         } else {
@@ -544,6 +564,94 @@
           else{ taskDetailCheckbox.classList.remove('checked'); taskDetailCheckbox.innerHTML=''; }
           // keep user on task detail
         }
+      }
+
+      function deleteTask(taskId){
+        const list = lists.find(x=>x.id===currentListId); if(!list) return;
+        const idx = list.tasks.findIndex(t=>t.id===taskId); if(idx===-1) return;
+        list.tasks.splice(idx,1);
+        saveState(); renderTasks(); renderLists();
+      }
+
+      function attachSwipeToDelete(node, taskId){
+        let startX = 0;
+        let currentX = 0;
+        let dragging = false;
+        let width = 0;
+        let preventedScroll = false;
+        let moved = false;
+
+        function setTranslate(x){
+          node.style.transform = `translateX(${x}px)`;
+        }
+
+        function setProgressBg(ratio){
+          const clamped = Math.max(0, Math.min(1, ratio));
+          const alpha = 0.08 + clamped * 0.6; // start slight red, get stronger
+          node.style.background = `rgba(255,0,0,${alpha})`;
+          node.style.borderColor = `rgba(255,0,0,${Math.min(0.35 + clamped * 0.4, 0.8)})`;
+        }
+
+        function clearStyles(){
+          node.style.transform = '';
+          node.style.background = '';
+          node.style.borderColor = '';
+        }
+
+        function onPointerDown(e){
+          if(e.button !== undefined && e.button !== 0) return; // only left button
+          dragging = true;
+          moved = false;
+          preventedScroll = false;
+          startX = e.clientX || (e.touches && e.touches[0] && e.touches[0].clientX) || 0;
+          currentX = startX;
+          width = node.offsetWidth || 1;
+          try{ node.setPointerCapture && node.setPointerCapture(e.pointerId); }catch(_){ }
+          node.classList.remove('swipe-anim');
+        }
+
+        function onPointerMove(e){
+          if(!dragging) return;
+          const x = e.clientX || (e.touches && e.touches[0] && e.touches[0].clientX) || 0;
+          const dx = x - startX;
+          if(Math.abs(dx) > 6) moved = true;
+          // only allow swipe to left for delete
+          const tx = Math.min(0, dx);
+          if(!preventedScroll && Math.abs(dx) > 10){
+            // lock vertical scroll while swiping horizontally
+            if(e.cancelable) e.preventDefault();
+            preventedScroll = true;
+          }
+          setTranslate(tx);
+          const ratio = Math.min(Math.abs(tx) / width, 1);
+          setProgressBg(ratio);
+        }
+
+        function onPointerUp(e){
+          if(!dragging) return;
+          dragging = false;
+          const endX = e.clientX || (e.changedTouches && e.changedTouches[0] && e.changedTouches[0].clientX) || currentX;
+          const dx = Math.min(0, endX - startX);
+          const ratio = Math.min(Math.abs(dx) / (width || 1), 1);
+          node.classList.add('swipe-anim');
+          if(ratio > 0.5){
+            // animate out then delete
+            setTranslate(-Math.max(width * 1.2, 200));
+            setTimeout(()=>{ deleteTask(taskId); }, 160);
+          } else {
+            // revert
+            setTranslate(0);
+            setProgressBg(0);
+            setTimeout(()=>{ clearStyles(); node.classList.remove('swipe-anim'); }, 180);
+          }
+        }
+
+        node.addEventListener('pointerdown', onPointerDown, { passive: true });
+        node.addEventListener('pointermove', onPointerMove);
+        node.addEventListener('pointerup', onPointerUp);
+        node.addEventListener('pointercancel', onPointerUp);
+        // prevent accidental click after swipe
+        node.addEventListener('click', (ev)=>{ if(moved){ ev.stopPropagation(); ev.preventDefault(); } });
       }
 
       // Composer controls (overlay)
