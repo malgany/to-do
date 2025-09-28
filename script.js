@@ -76,6 +76,7 @@
       // Sync helpers
       let syncTimers = Object.create(null);
       let liveSubscriptions = Object.create(null);
+      let realtimeRetryTimers = Object.create(null);
 
       function canSyncList(list){
         if(!list) return false;
@@ -107,9 +108,18 @@
           if(!list) return;
           const code = String(list.shareCode||'').replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
           if(!code || code.length!==6) return;
-          if(!window || typeof window.firebaseSubscribe !== 'function') return;
+          const subscribeFn = (typeof window !== 'undefined') ? window.firebaseSubscribe : null;
+          if(typeof subscribeFn !== 'function'){
+            if(!realtimeRetryTimers[listId]){
+              realtimeRetryTimers[listId] = setTimeout(()=>{
+                realtimeRetryTimers[listId] = null;
+                startRealtimeForList(listId);
+              }, 180);
+            }
+            return;
+          }
           if(liveSubscriptions[listId]) return; // já inscrito
-          window.firebaseSubscribe(code, (remote)=>{
+          subscribeFn(code, (remote)=>{
             if(!remote) return;
             const pushedAt = list._lastPushedAt || 0;
           const remoteAt = (remote && remote.updatedAt) ? Number(remote.updatedAt) : 0;
@@ -129,6 +139,10 @@
             }
           });
           liveSubscriptions[listId] = code;
+          if(realtimeRetryTimers[listId]){
+            clearTimeout(realtimeRetryTimers[listId]);
+            delete realtimeRetryTimers[listId];
+          }
         }catch(_){ }
       }
 
@@ -140,6 +154,22 @@
             window.firebaseUnsubscribe(code);
           }
           delete liveSubscriptions[listId];
+          if(realtimeRetryTimers[listId]){
+            clearTimeout(realtimeRetryTimers[listId]);
+            delete realtimeRetryTimers[listId];
+          }
+        }catch(_){ }
+      }
+
+      function startRealtimeForExistingLists(){
+        try{
+          (lists||[]).forEach((l)=>{
+            if(!l) return;
+            const normalized = String(l.shareCode||'').replace(/[^0-9A-Z]/gi,'').toUpperCase();
+            if(normalized.length===6){
+              startRealtimeForList(l.id);
+            }
+          });
         }catch(_){ }
       }
 
@@ -1164,7 +1194,12 @@
       renderLists();
       updateSubtitle();
       updateAppBar(screenLists);
-      try{ (lists||[]).forEach(l=>{ if(l && l.shareCode && String(l.shareCode).replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6).length===6){ startRealtimeForList(l.id); } }); }catch(_){ }
+      startRealtimeForExistingLists();
+      try{
+        if(typeof window !== 'undefined' && !window.firebaseReady){
+          window.addEventListener('firebase-ready', startRealtimeForExistingLists, { once: true });
+        }
+      }catch(_){ }
 
       // Keep saving on unload
       window.addEventListener('beforeunload', saveState);

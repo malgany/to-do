@@ -259,6 +259,10 @@
     window.firebaseDeleteList = deleteListFromFirebase;
     window.firebaseSubscribe = subscribeToList;
     window.firebaseUnsubscribe = unsubscribeFromList;
+    window.firebaseReady = true;
+    try{
+      window.dispatchEvent(new Event('firebase-ready'));
+    }catch(_){ }
   </script>
   
   <script src="script.js?v=1.0.1"></script>
