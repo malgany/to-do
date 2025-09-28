@@ -406,8 +406,6 @@ button.btn:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 .code-gap{display:inline-block}
 
 .share-backdrop{position:fixed;inset:0;background:rgba(17,24,39,0.45);display:none;align-items:flex-start;justify-content:center;padding:20px;z-index:60}
-.menu-backdrop{position:fixed;inset:0;background:rgba(17,24,39,0.2);display:none;z-index:80}
-.menu-backdrop.show{display:block}
 .share-backdrop.show{display:flex}
 .share-dialog{width:100%;max-width:360px;background:var(--card);padding:var(--space-4);border-radius:var(--radius-md);display:flex;flex-direction:column;gap:var(--space-3);align-items:stretch;text-align:center;margin-top:150px;box-shadow:var(--shadow-md)}
 .share-title{font-size:var(--fs-lg);font-weight:600;color:var(--text)}

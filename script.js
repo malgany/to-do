@@ -27,7 +27,6 @@
       const appSubtitle = el('appSubtitle');
       const appMenuBtn = el('appMenuBtn');
       const appMenu = el('appMenu');
-      const menuBackdrop = el('menuBackdrop');
       const shareListAction = el('shareListAction');
       const shareBackdrop = el('shareBackdrop');
       const shareCodeValue = el('shareCodeValue');
@@ -293,7 +292,6 @@
         if(!isMenuOpen) return;
         appMenu.hidden = true;
         appMenuBtn.setAttribute('aria-expanded','false');
-        if(menuBackdrop){ menuBackdrop.classList.remove('show'); menuBackdrop.style.display='none'; }
         document.removeEventListener('click', handleOutsideMenuClick, true);
         document.removeEventListener('keydown', handleMenuKeyDown);
         isMenuOpen = false;
@@ -310,7 +308,6 @@
           document.addEventListener('click', handleOutsideMenuClick, true);
           document.addEventListener('keydown', handleMenuKeyDown);
           shareListAction.focus();
-          if(menuBackdrop){ menuBackdrop.style.display='block'; menuBackdrop.classList.add('show'); }
         }
       }
 
@@ -1047,8 +1044,6 @@
           if(codeBackdrop && codeBackdrop.classList.contains('show')){ closeCodeModal(); }
         }
       });
-
-      if(menuBackdrop){ menuBackdrop.addEventListener('click', hideAppMenu); }
 
       // initial load
       loadState();
