@@ -236,7 +236,7 @@
           appTitle.textContent = DEFAULT_TITLE;
           btnNewList.hidden = false;
           if(appSubtitle){ appSubtitle.hidden = false; }
-          if(btnImportCode){ btnImportCode.hidden = false; }
+          if(btnImportCode){ btnImportCode.style.display = ""; }
           setAppMenuVisibility(false);
         } else if(activeScreen===screenListDetail){
           globalBackBtn.hidden = false;
@@ -245,7 +245,7 @@
           appTitle.textContent = '';
           btnNewList.hidden = true;
           if(appSubtitle){ appSubtitle.hidden = true; }
-          if(btnImportCode){ btnImportCode.hidden = false; }
+          if(btnImportCode){ btnImportCode.style.display = "none"; }
           setAppMenuVisibility(true);
           const list = lists.find(x=>x.id===currentListId);
           if(shareListAction){
@@ -267,7 +267,7 @@
           }
           btnNewList.hidden = true;
           if(appSubtitle){ appSubtitle.hidden = true; }
-          if(btnImportCode){ btnImportCode.hidden = true; }
+          if(btnImportCode){ btnImportCode.style.display = "none"; }
           setAppMenuVisibility(false);
         }
       }
@@ -577,6 +577,20 @@
         unlockScroll();
       }
 
+      function updateCodeImportState(){
+        try{
+          if(!codeImport){ return; }
+          if(!codeInputs || codeInputs.length===0){
+            codeImport.disabled = true;
+            return;
+          }
+          const filled = codeInputs.every(input=> (input.value||'').trim().length===1);
+          codeImport.disabled = !filled;
+        }catch(_){
+          if(codeImport){ codeImport.disabled = true; }
+        }
+      }
+
       function openCodeModal(){
         if(!codeBackdrop) return;
         codeBackdrop.style.display='flex';
@@ -592,6 +606,7 @@
               const val = input.value.toUpperCase().replace(/[^0-9A-Z]/g,'');
               input.value = val.slice(0,1);
               if(val && idx<codeInputs.length-1){ codeInputs[idx+1].focus(); }
+              updateCodeImportState();
             });
             input.addEventListener('keydown', (e)=>{
               if(e.key==='Backspace' && !input.value && idx>0){ codeInputs[idx-1].focus(); }
@@ -612,11 +627,13 @@
               }
               const nextIndex = Math.min(clean.length, codeInputs.length-1);
               codeInputs[nextIndex].focus();
+              updateCodeImportState();
             });
           });
         } else {
           codeInputs.forEach(i=>i.value='');
         }
+        updateCodeImportState();
         setTimeout(()=>{ if(codeInputs[0]) codeInputs[0].focus(); }, 40);
       }
 
@@ -1008,7 +1025,7 @@
             }
             codeImport.disabled = true;
             const remote = await window.firebaseGetList(normalized);
-            codeImport.disabled = false;
+            updateCodeImportState();
             if(!remote){ alert('Código não encontrado.'); return; }
             const id = 'l_'+Date.now();
             const title = remote.title || 'Lista Importada';
@@ -1018,7 +1035,7 @@
             saveState(); renderLists(); closeCodeModal(); openList(id);
             startRealtimeForList(id);
           }catch(e){
-            try{ codeImport.disabled = false; }catch(_){ }
+            try{ updateCodeImportState(); }catch(_){ }
             alert('Ocorreu um erro ao importar.');
           }
         });
