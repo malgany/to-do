@@ -100,7 +100,7 @@ header.appbar{
   background:var(--bg);
   position:sticky;
   top:0;
-  z-index:120;
+  z-index:70;
 }
 
 .appbar-left{display:flex;align-items:center;gap:var(--space-3);flex:1;min-width:0}
@@ -394,7 +394,7 @@ button.btn:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 /* modal */
 .modal-backdrop{position:fixed;inset:0;background:rgba(17,24,39,0.45);display:none;align-items:flex-start;justify-content:center;padding:20px;z-index:70}
 .modal-backdrop.show{display:flex}
-.modal{width:100%;max-width:520px;background:var(--card);padding:var(--space-4);border-radius:var(--radius-md);box-shadow:var(--shadow-md);margin-top:60px}
+.modal{width:100%;max-width:520px;background:var(--card);padding:var(--space-4);border-radius:var(--radius-md);box-shadow:var(--shadow-md);margin-top:150px}
 .modal h3{font-size:var(--fs-lg);margin-bottom:var(--space-3)}
 .modal .modal-body{display:flex;flex-direction:column;gap:var(--space-3)}
 .modal input{padding:12px;border-radius:12px;border:1px solid var(--border);font-size:var(--fs-md);background:var(--bg);color:var(--text)}
@@ -409,7 +409,7 @@ button.btn:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 .menu-backdrop{position:fixed;inset:0;background:rgba(17,24,39,0.2);display:none;z-index:80}
 .menu-backdrop.show{display:block}
 .share-backdrop.show{display:flex}
-.share-dialog{width:100%;max-width:360px;background:var(--card);padding:var(--space-4);border-radius:var(--radius-md);display:flex;flex-direction:column;gap:var(--space-3);align-items:stretch;text-align:center;margin-top:60px;box-shadow:var(--shadow-md)}
+.share-dialog{width:100%;max-width:360px;background:var(--card);padding:var(--space-4);border-radius:var(--radius-md);display:flex;flex-direction:column;gap:var(--space-3);align-items:stretch;text-align:center;margin-top:150px;box-shadow:var(--shadow-md)}
 .share-title{font-size:var(--fs-lg);font-weight:600;color:var(--text)}
 .share-instructions{color:var(--muted);font-size:var(--fs-sm)}
 .share-code-row{display:flex;align-items:center;justify-content:center;gap:var(--space-3)}
