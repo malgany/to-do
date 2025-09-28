@@ -19,9 +19,18 @@
     <header class="appbar">
       <div class="appbar-left">
         <button id="globalBackBtn" class="back-btn" type="button" aria-label="Voltar" hidden>←</button>
-        <div class="app-title" id="appTitle">To‑Do</div>
+        <div class="app-title-group">
+          <div class="app-title" id="appTitle">To‑Do</div>
+          <div class="app-subtitle" id="appSubtitle">Hoje</div>
+        </div>
       </div>
       <div class="appbar-right">
+        <button id="btnImportCode" class="icon-btn soft" type="button" aria-label="Importar lista por código" aria-haspopup="dialog">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M3 3h7v7H3V3zm2 2v3h3V5H5zm7-2h7v7h-7V3zm2 2v3h3V5h-3zM3 14h7v7H3v-7zm2 2v3h3v-3H5zm11-2h2v2h-2v-2zm4 0h2v2h-2v-2zm-4 4h2v2h-2v-2zm4 0h2v5h-5v-5h-1v-2h2v2h2z" fill="currentColor"></path>
+          </svg>
+          <span class="sr-only">Código</span>
+        </button>
         <button id="appMenuBtn" class="icon-btn" type="button" aria-label="Mais opções" aria-haspopup="true" aria-expanded="false" hidden>⋮</button>
         <div id="appMenu" class="app-menu" role="menu" hidden>
           <button id="shareListAction" class="app-menu-item" type="button" role="menuitem">Compartilhar lista</button>
@@ -35,10 +44,24 @@
     <!-- Screen: Lists -->
     <main id="screenLists" class="screen active" aria-label="Listas">
       <div class="lists" id="listsContainer">
-        <div class="centered-empty" id="noLists">Nenhuma lista criada. Toque em "Nova Lista" para começar.</div>
+        <div class="centered-empty" id="noLists">
+          <div class="empty-illustration" aria-hidden="true">
+            <svg viewBox="0 0 80 80" role="presentation" focusable="false">
+              <rect x="12" y="16" width="56" height="48" rx="12" fill="var(--brand-50)" />
+              <rect x="20" y="26" width="40" height="6" rx="3" fill="var(--brand-100, #DCE6FE)" />
+              <rect x="20" y="38" width="32" height="6" rx="3" fill="var(--brand-100, #DCE6FE)" />
+              <rect x="20" y="50" width="24" height="6" rx="3" fill="var(--brand-100, #DCE6FE)" />
+            </svg>
+          </div>
+          <h2 class="empty-title">Crie sua primeira lista</h2>
+          <p class="empty-description">Organize tarefas, estudos e ideias com um toque.</p>
+          <button class="empty-cta" type="button">Nova lista</button>
+        </div>
       </div>
-      <button id="btnImportCode" class="code-btn" aria-haspopup="dialog"><span class="icon">+</span><span>Código</span></button>
-      <button id="btnNewList" class="new-list-btn" aria-haspopup="dialog"><span class="icon">+</span><span>Nova Lista</span></button>
+      <button id="btnNewList" class="fab-primary" type="button" aria-haspopup="dialog" aria-label="Nova lista">
+        <span class="icon">＋</span>
+        <span class="sr-only">Nova lista</span>
+      </button>
     </main>
 
     <!-- Screen: Single List -->

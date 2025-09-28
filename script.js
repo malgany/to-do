@@ -16,6 +16,7 @@
       const noLists = el('noLists');
       const btnNewList = el('btnNewList');
       const btnImportCode = el('btnImportCode');
+      const emptyStateCta = noLists ? noLists.querySelector('.empty-cta') : null;
       const modalBackdrop = el('modalBackdrop');
       const modalTitle = el('modalTitle');
       const listNameInput = el('listNameInput');
@@ -23,6 +24,7 @@
       const modalPrimary = el('modalPrimary');
       const currentListName = el('currentListName');
       const appTitle = el('appTitle');
+      const appSubtitle = el('appSubtitle');
       const appMenuBtn = el('appMenuBtn');
       const appMenu = el('appMenu');
       const menuBackdrop = el('menuBackdrop');
@@ -227,11 +229,14 @@
 
       function updateAppBar(activeScreen){
         if(activeScreen===screenLists){
+          updateSubtitle();
           globalBackBtn.hidden = true;
           globalBackBtn.onclick = null;
           appTitle.hidden = false;
           appTitle.textContent = DEFAULT_TITLE;
           btnNewList.hidden = false;
+          if(appSubtitle){ appSubtitle.hidden = false; }
+          if(btnImportCode){ btnImportCode.hidden = false; }
           setAppMenuVisibility(false);
         } else if(activeScreen===screenListDetail){
           globalBackBtn.hidden = false;
@@ -239,6 +244,8 @@
           appTitle.hidden = true;
           appTitle.textContent = '';
           btnNewList.hidden = true;
+          if(appSubtitle){ appSubtitle.hidden = true; }
+          if(btnImportCode){ btnImportCode.hidden = false; }
           setAppMenuVisibility(true);
           const list = lists.find(x=>x.id===currentListId);
           if(shareListAction){
@@ -259,6 +266,8 @@
             appTitle.textContent = '';
           }
           btnNewList.hidden = true;
+          if(appSubtitle){ appSubtitle.hidden = true; }
+          if(btnImportCode){ btnImportCode.hidden = true; }
           setAppMenuVisibility(false);
         }
       }
@@ -464,7 +473,7 @@
           bullet.setAttribute('cx', '5');
           bullet.setAttribute('cy', String(y));
           bullet.setAttribute('r', '1.8');
-          bullet.setAttribute('fill', '#000');
+          bullet.setAttribute('fill', 'currentColor');
           svg.appendChild(bullet);
 
           const line = document.createElementNS(SVG_NS, 'line');
@@ -472,13 +481,32 @@
           line.setAttribute('y1', String(y));
           line.setAttribute('x2', '19');
           line.setAttribute('y2', String(y));
-          line.setAttribute('stroke', '#000');
+          line.setAttribute('stroke', 'currentColor');
           line.setAttribute('stroke-width', '2');
           line.setAttribute('stroke-linecap', 'round');
           svg.appendChild(line);
         });
 
         return svg;
+      }
+
+      function formatSubtitleDate(){
+        try{
+          const now = new Date();
+          const weekday = new Intl.DateTimeFormat('pt-BR', { weekday: 'long' }).format(now);
+          let dayMonth = new Intl.DateTimeFormat('pt-BR', { day: 'numeric', month: 'short' }).format(now);
+          dayMonth = dayMonth.replace(' de ', ' ').replace('.', '');
+          const capitalizedWeekday = weekday.charAt(0).toUpperCase() + weekday.slice(1);
+          return `${capitalizedWeekday}, ${dayMonth}`;
+        }catch(_){
+          return 'Hoje';
+        }
+      }
+
+      function updateSubtitle(){
+        if(appSubtitle){
+          appSubtitle.textContent = formatSubtitleDate();
+        }
       }
 
       function renderLists(){
@@ -505,10 +533,11 @@
           card.appendChild(ico);
           card.appendChild(txt);
 
-          if(incompleteCount>0){
-            const countEl = document.createElement('div'); countEl.className='list-counter'; countEl.textContent = incompleteCount;
-            card.appendChild(countEl);
-          }
+          const countEl = document.createElement('div');
+          countEl.className='list-counter';
+          countEl.textContent = incompleteCount;
+          countEl.setAttribute('aria-label', `${incompleteCount} ${(incompleteCount===1)?'tarefa pendente':'tarefas pendentes'}`);
+          card.appendChild(countEl);
 
           listsContainer.appendChild(card);
         });
@@ -921,6 +950,7 @@
 
       // Events
       btnNewList.addEventListener('click', ()=>{ if(codeBackdrop && codeBackdrop.classList.contains('show')) closeCodeModal(); openModal('create'); });
+      if(emptyStateCta){ emptyStateCta.addEventListener('click', ()=>{ btnNewList.click(); }); }
       modalCancel.addEventListener('click', ()=>closeModal());
       modalPrimary.addEventListener('click', ()=>{ const mode = modalBackdrop.dataset.mode; if(mode==='create') createListFromModal(); else saveRenameFromModal(); });
       listNameInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter' && !modalPrimary.disabled){ modalPrimary.click(); } });
@@ -1006,6 +1036,7 @@
       // initial load
       loadState();
       renderLists();
+      updateSubtitle();
       updateAppBar(screenLists);
       try{ (lists||[]).forEach(l=>{ if(l && l.shareCode && String(l.shareCode).replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6).length===6){ startRealtimeForList(l.id); } }); }catch(_){ }
 
