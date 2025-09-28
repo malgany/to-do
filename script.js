@@ -1092,6 +1092,16 @@
       openComposer.addEventListener('click', toggleComposer);
       composerInput.addEventListener('input', ()=>{ sendTask.disabled = composerInput.value.trim().length===0; });
       composerInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter' && !sendTask.disabled){ sendTask.click(); } });
+      // Keep focus on the input so the virtual keyboard stays open after sending.
+      sendTask.addEventListener('mousedown', (event)=>{
+        event.preventDefault();
+        try{ composerInput.focus({ preventScroll: true }); }catch(_){ composerInput.focus(); }
+      });
+      sendTask.addEventListener('touchstart', (event)=>{
+        event.preventDefault();
+        try{ composerInput.focus({ preventScroll: true }); }catch(_){ composerInput.focus(); }
+        if(!sendTask.disabled){ sendTaskNow(); }
+      }, { passive: false });
       sendTask.addEventListener('click', sendTaskNow);
 
       // clicking backdrop closes composer (but not modal backdrop)
