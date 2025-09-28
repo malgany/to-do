@@ -151,6 +151,21 @@
       </div>
     </div>
 
+    <!-- Confirm Dialog -->
+    <div id="confirmBackdrop" class="modal-backdrop" role="dialog" aria-modal="true" style="display:none">
+      <div class="modal confirm-modal" role="document">
+        <h3 id="confirmTitle" class="confirm-title">Confirmar ação</h3>
+        <p id="confirmMessage" class="confirm-message"></p>
+        <div class="actions">
+          <button id="confirmCancel" class="btn" type="button">Cancelar</button>
+          <button id="confirmPrimary" class="btn primary" type="button">Confirmar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast notifications -->
+    <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
     <!-- Composer overlay (hidden by default, appears above keyboard, with dim backdrop) -->
     <div id="composerBackdrop" class="composer-backdrop" role="dialog" aria-hidden="true" style="display:none">
       <div class="composer-overlay" role="document">

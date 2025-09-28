@@ -50,6 +50,12 @@
       const chev = el('chev');
       const rootEl = document.documentElement;
       const composerOverlayEl = ()=> document.querySelector('.composer-overlay');
+      const confirmBackdrop = el('confirmBackdrop');
+      const confirmTitle = el('confirmTitle');
+      const confirmMessage = el('confirmMessage');
+      const confirmCancel = el('confirmCancel');
+      const confirmPrimary = el('confirmPrimary');
+      const toastContainer = el('toastContainer');
 
       // Code modal elements
       const codeBackdrop = el('codeBackdrop');
@@ -66,6 +72,7 @@
       let activeShareCode = '';
       let copyFeedbackTimer = null;
       let pendingSharedCode = null;
+      let confirmResolver = null;
       // Sync helpers
       let syncTimers = Object.create(null);
       let liveSubscriptions = Object.create(null);
@@ -144,6 +151,85 @@
       function unlockScroll(){
         rootEl.classList.remove('scroll-lock');
         document.body.classList.remove('scroll-lock');
+      }
+
+      function isAnotherOverlayActive(){
+        return (modalBackdrop && modalBackdrop.classList.contains('show')) ||
+          (codeBackdrop && codeBackdrop.classList.contains('show')) ||
+          (shareBackdrop && shareBackdrop.classList.contains('show'));
+      }
+
+      function hideConfirmBackdrop(){
+        if(!confirmBackdrop) return;
+        confirmBackdrop.classList.remove('show');
+        confirmBackdrop.style.display='none';
+        if(!isAnotherOverlayActive()){
+          unlockScroll();
+        }
+      }
+
+      function settleConfirm(result){
+        if(typeof result === 'undefined'){ result = false; }
+        if(confirmResolver){
+          const resolver = confirmResolver;
+          confirmResolver = null;
+          hideConfirmBackdrop();
+          try{ resolver(!!result); }catch(_){ }
+        } else {
+          hideConfirmBackdrop();
+        }
+      }
+
+      function showConfirmDialog(options){
+        const defaults = { title: 'Confirmar ação', message: '', confirmText: 'Confirmar', cancelText: 'Cancelar' };
+        const config = Object.assign({}, defaults, options||{});
+        if(!confirmBackdrop || !confirmMessage || !confirmPrimary || !confirmCancel){
+          return Promise.resolve(window.confirm(config.message));
+        }
+        if(confirmResolver){ settleConfirm(false); }
+        confirmTitle.textContent = config.title;
+        confirmMessage.textContent = config.message;
+        confirmPrimary.textContent = config.confirmText;
+        confirmCancel.textContent = config.cancelText;
+        confirmBackdrop.style.display='flex';
+        confirmBackdrop.classList.add('show');
+        lockScroll();
+        return new Promise((resolve)=>{
+          confirmResolver = resolve;
+          setTimeout(()=>{
+            try{ confirmPrimary.focus(); }catch(_){ }
+          }, 30);
+        });
+      }
+
+      if(confirmCancel){ confirmCancel.addEventListener('click', ()=>{ settleConfirm(false); }); }
+      if(confirmPrimary){ confirmPrimary.addEventListener('click', ()=>{ settleConfirm(true); }); }
+      if(confirmBackdrop){
+        confirmBackdrop.addEventListener('click', (evt)=>{
+          if(evt.target===confirmBackdrop){ settleConfirm(false); }
+        });
+      }
+
+      function showToast(message, opts){
+        if(!toastContainer){ return; }
+        const options = Object.assign({ type: 'info', duration: 3200 }, opts||{});
+        const toast = document.createElement('div');
+        const typeClass = (options.type==='error') ? ' error' : (options.type==='success') ? ' success' : '';
+        toast.className = 'toast'+typeClass;
+        toast.setAttribute('role','status');
+        toast.textContent = message;
+        toastContainer.appendChild(toast);
+        requestAnimationFrame(()=>{ toast.classList.add('show'); });
+        const remove = ()=>{
+          toast.classList.remove('show');
+          setTimeout(()=>{ if(toast.parentNode){ toast.parentNode.removeChild(toast); } }, 180);
+        };
+        const timeout = Math.max(1500, Number(options.duration)||3200);
+        const timer = setTimeout(remove, timeout);
+        toast.addEventListener('click', ()=>{
+          clearTimeout(timer);
+          remove();
+        });
       }
 
       // Keyboard avoidance for overlays (modals/composer/share)
@@ -991,7 +1077,12 @@
           if(!currentListId) return;
           const list = lists.find(x=>x.id===currentListId);
           const title = list ? (list.title || 'esta lista') : 'esta lista';
-          const ok = confirm(`Excluir "${title}"? Essa ação não pode ser desfeita.`);
+          const ok = await showConfirmDialog({
+            title: 'Excluir lista',
+            message: `Excluir "${title}"? Essa ação não pode ser desfeita.`,
+            confirmText: 'Excluir',
+            cancelText: 'Cancelar'
+          });
           if(!ok) return;
           await deleteCurrentList();
         });
@@ -999,7 +1090,12 @@
       if(resetAppAction){
         resetAppAction.addEventListener('click', async ()=>{
           hideAppMenu();
-          const confirmReset = confirm('Isso limpará todos os dados locais e recarregará o app. Continuar?');
+          const confirmReset = await showConfirmDialog({
+            title: 'Resetar aplicativo',
+            message: 'Isso limpará todos os dados locais e recarregará o app. Deseja continuar?',
+            confirmText: 'Resetar',
+            cancelText: 'Cancelar'
+          });
           if(confirmReset){ await resetApp(); }
         });
       }
@@ -1016,14 +1112,26 @@
             if(!codeInputs || codeInputs.length===0){ return; }
             const raw = codeInputs.map(i=> (i.value||'').toUpperCase().replace(/[^0-9A-Z]/g,'')).join('');
             const normalized = raw.slice(0,6);
-            if(normalized.length!==6){ alert('Informe um código de 6 caracteres.'); return; }
+            if(normalized.length!==6){
+              updateCodeImportState();
+              showToast('Informe um código de 6 caracteres.', { type: 'error' });
+              setTimeout(()=>{ if(codeInputs[0]) codeInputs[0].focus(); }, 150);
+              return;
+            }
             if(typeof window === 'undefined' || typeof window.firebaseGetList !== 'function'){
-              alert('Importação indisponível no momento.'); return;
+              updateCodeImportState();
+              showToast('Importação indisponível no momento.', { type: 'error' });
+              setTimeout(()=>{ if(codeInputs[0]) codeInputs[0].focus(); }, 150);
+              return;
             }
             codeImport.disabled = true;
             const remote = await window.firebaseGetList(normalized);
             updateCodeImportState();
-            if(!remote){ alert('Código não encontrado.'); return; }
+            if(!remote){
+              showToast('Código não encontrado.', { type: 'error' });
+              setTimeout(()=>{ if(codeInputs[0]) codeInputs[0].focus(); }, 150);
+              return;
+            }
             const id = 'l_'+Date.now();
             const title = remote.title || 'Lista Importada';
             const tasks = Array.isArray(remote.tasks) ? remote.tasks.map((t, idx)=>({ id: 't_'+Date.now()+'_'+idx, text: t && t.text ? String(t.text) : '', done: !!(t && t.done) })) : [];
@@ -1033,14 +1141,20 @@
             startRealtimeForList(id);
           }catch(e){
             try{ updateCodeImportState(); }catch(_){ }
-            alert('Ocorreu um erro ao importar.');
+            showToast('Ocorreu um erro ao importar.', { type: 'error' });
+            setTimeout(()=>{ if(codeInputs[0]) codeInputs[0].focus(); }, 150);
           }
         });
       }
       document.addEventListener('keydown', (evt)=>{
         if(evt.key==='Escape'){
+          if(confirmBackdrop && confirmBackdrop.classList.contains('show')){
+            evt.preventDefault();
+            settleConfirm(false);
+            return;
+          }
           if(isMenuOpen){ hideAppMenu(); }
-          if(shareBackdrop.classList.contains('show')){ closeShareDialog(); }
+          if(shareBackdrop && shareBackdrop.classList.contains('show')){ closeShareDialog(); }
           if(codeBackdrop && codeBackdrop.classList.contains('show')){ closeCodeModal(); }
         }
       });
