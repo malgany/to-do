@@ -71,7 +71,6 @@
       let isMenuOpen = false;
       let activeShareCode = '';
       let copyFeedbackTimer = null;
-      let pendingSharedCode = null;
       let confirmResolver = null;
       // Sync helpers
       let syncTimers = Object.create(null);
@@ -451,22 +450,43 @@
         return sanitized.slice(0,3)+' '+sanitized.slice(3);
       }
 
-      function openShareDialog(){
+      async function openShareDialog(){
         if(!currentListId) return;
         const list = lists.find(x=>x.id===currentListId);
         if(list && list.imported){ return; }
+        let needsSharing = false;
+        
         if(list && list.shareCode){
           activeShareCode = String(list.shareCode).replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
-          pendingSharedCode = null; // já existe código, não criar/atualizar remoto
         } else {
           activeShareCode = generateShareCode();
           if(list){ list.shareCode = activeShareCode; saveState(); }
-          pendingSharedCode = activeShareCode; // indica primeira criação
+          needsSharing = true;
           if(list){ startRealtimeForList(list.id); }
         }
+        
+        // Compartilhar com Firebase ao abrir o modal
+        if(needsSharing && list && typeof window !== 'undefined' && typeof window.firebaseShareList === 'function'){
+          try {
+            shareCopyFeedback.textContent='Compartilhando lista...';
+            shareCopyFeedback.classList.remove('error');
+            await window.firebaseShareList(activeShareCode, { title: list.title, tasks: list.tasks });
+            list.shareCreated = true;
+            saveState();
+            shareCopyFeedback.textContent='Lista compartilhada com sucesso!';
+          } catch(err) {
+            // Falha ao compartilhar, mas continua mostrando o diálogo
+            console.error('Erro ao compartilhar:', err);
+            shareCopyFeedback.textContent='Erro ao compartilhar a lista';
+            shareCopyFeedback.classList.add('error');
+          }
+        }
+        
         shareCodeValue.textContent = formatDisplayCode(activeShareCode);
-        shareCopyFeedback.textContent='';
-        shareCopyFeedback.classList.remove('error');
+        if(!shareCopyFeedback.textContent) {
+          shareCopyFeedback.textContent='';
+          shareCopyFeedback.classList.remove('error');
+        }
         shareBackdrop.style.display='flex';
         shareBackdrop.classList.add('show');
         lockScroll();
@@ -493,7 +513,7 @@
           shareCopyFeedback.textContent='';
           shareCopyFeedback.classList.remove('error');
           copyFeedbackTimer=null;
-        }, 2000);
+        }, 3000);
       }
 
       async function resetApp(){
@@ -533,28 +553,11 @@
       async function attemptCopyShareCode(){
         if(!activeShareCode) return;
         const formatted = formatDisplayCode(activeShareCode);
-        let sharedOk = true;
-        let attemptedRemote = false;
-        try{
-          const list = lists.find(x=>x.id===currentListId);
-          const hasExisting = !!(list && list.shareCreated);
-          const shouldCreate = !!(list && !hasExisting && pendingSharedCode && pendingSharedCode === activeShareCode);
-          if(shouldCreate && typeof window !== 'undefined' && typeof window.firebaseShareList === 'function'){
-            attemptedRemote = true;
-            await window.firebaseShareList(activeShareCode, { title: list.title, tasks: list.tasks });
-            list.shareCreated = true;
-            saveState();
-            startRealtimeForList(list.id);
-          }
-        }catch(err){
-          sharedOk = false;
-        }
+        
         const onCopyOk = ()=> {
-          if(attemptedRemote){
-            notifyCopyFeedback(sharedOk ? 'Copiado e compartilhado!' : 'Copiado! (falha ao compartilhar)', !sharedOk);
-          } else {
-            notifyCopyFeedback('Copiado!', false);
-          }
+          const list = lists.find(x=>x.id===currentListId);
+          const isNewlyShared = list && list.shareCreated === true;
+          notifyCopyFeedback('Código copiado!', false);
         };
         if(navigator.clipboard && navigator.clipboard.writeText){
           navigator.clipboard.writeText(formatted).then(onCopyOk).catch(()=>{ legacyCopy(formatted); });
