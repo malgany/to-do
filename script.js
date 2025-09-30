@@ -871,7 +871,7 @@
         list.tasks[idx].done = !!markDone;
         // move item: remove and then place accordingly
         const [task] = list.tasks.splice(idx,1);
-        if(task.done) list.tasks.push(task); // completed at end
+        if(task.done) list.tasks.unshift(task); // completed at beginning
         else list.tasks.unshift(task); // active to top
         saveState(); renderTasks(); renderLists(); requestSync(list.id);
         // if we're in task detail for this task, update detail checkbox and text style
