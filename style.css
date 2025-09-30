@@ -193,6 +193,7 @@ header.appbar{
   box-shadow:var(--shadow-sm);
   min-height:64px;
   transition:transform var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
+  touch-action:pan-y;
 }
 .list-card:hover{background:var(--card-hover);box-shadow:0 10px 30px rgba(15,23,42,0.12)}
 .list-card:active{transform:scale(0.98);box-shadow:var(--shadow-sm)}
@@ -304,6 +305,7 @@ button.btn:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
   background:var(--card);
   box-shadow:var(--shadow-sm);
   transition:background var(--transition-fast), transform var(--transition-fast);
+  touch-action:pan-y;
 }
 .task:hover{background:var(--card-hover)}
 .task.swipe-anim{transition:transform .18s ease}
@@ -434,6 +436,29 @@ button.btn:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
   .frame{border-radius:0;min-height:100vh;min-height:100dvh;box-shadow:none}
   header.appbar{padding:var(--space-3) var(--gutter)}
   .screen{padding:var(--space-4) var(--gutter) calc(110px + env(safe-area-inset-bottom))}
+}
+
+/* Estilos para sortable drag and drop */
+/* arrastar em qualquer lugar do item */
+.list-card,
+.task { cursor: grab; }
+.list-card:active,
+.task:active { cursor: grabbing; }
+
+.sortable-ghost {
+  opacity: 0.5;
+  background: var(--brand-50) !important;
+}
+
+.sortable-chosen {
+  background: var(--brand-50) !important;
+  box-shadow: var(--shadow-md);
+}
+
+.sortable-drag {
+  opacity: 0.9;
+  box-shadow: var(--shadow-md);
+  z-index: 999;
 }
 
 @media (prefers-reduced-motion:reduce){

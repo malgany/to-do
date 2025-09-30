@@ -635,6 +635,7 @@
           const card = document.createElement('div');
           card.className='list-card';
           card.tabIndex=0;
+          card.dataset.id = l.id; // Atributo data para sorting
           card.addEventListener('click', ()=>openList(l.id));
           card.addEventListener('keydown', (e)=>{ if(e.key==='Enter') openList(l.id) });
 
@@ -657,6 +658,9 @@
 
           listsContainer.appendChild(card);
         });
+        
+        // Inicializar sortable para as listas após renderização
+        initSortableLists();
       }
 
       function openModal(mode, listId){
@@ -833,7 +837,9 @@
             const txt = document.createElement('div'); txt.className='text'; txt.textContent=t.text;
             // clicking the text opens detail
             txt.addEventListener('click', (ev)=>{ ev.stopPropagation(); openTaskDetail(t.id); });
-            node.appendChild(cb); node.appendChild(txt);
+
+            node.appendChild(cb); 
+            node.appendChild(txt);
             tasksContainer.appendChild(node);
           });
         }
@@ -851,12 +857,17 @@
             const cb = document.createElement('button'); cb.className='checkbox-round checked'; cb.setAttribute('aria-pressed','true'); cb.title='Desmarcar'; cb.innerHTML='✓'; cb.addEventListener('click', (ev)=>{ ev.stopPropagation(); animateAndToggle(cb, t.id, false); });
             const txt = document.createElement('div'); txt.className='text'; txt.textContent=t.text;
             txt.addEventListener('click', (ev)=>{ ev.stopPropagation(); openTaskDetail(t.id); });
-            node.appendChild(cb); node.appendChild(txt);
+
+            node.appendChild(cb); 
+            node.appendChild(txt);
             completedList.appendChild(node);
           });
         } else {
           completedGroup.style.display='none';
         }
+        
+        // Inicializar sortable para as tarefas após renderização
+        initSortableTasks();
       }
 
       // animation helper: add pop class then toggle state
@@ -868,12 +879,31 @@
       function toggleTaskDone(taskId, markDone){
         const list = lists.find(x=>x.id===currentListId); if(!list) return;
         const idx = list.tasks.findIndex(t=>t.id===taskId); if(idx===-1) return;
-        list.tasks[idx].done = !!markDone;
-        // move item: remove and then place accordingly
-        const [task] = list.tasks.splice(idx,1);
-        if(task.done) list.tasks.unshift(task); // completed at beginning
-        else list.tasks.unshift(task); // active to top
-        saveState(); renderTasks(); renderLists(); requestSync(list.id);
+        
+        // Obter listas separadas de tarefas ativas e concluídas (excluindo a tarefa atual)
+        const activeTasks = list.tasks.filter(t => !t.done && t.id !== taskId);
+        const doneTasks = list.tasks.filter(t => t.done && t.id !== taskId);
+        
+        // Atualizar o status da tarefa
+        const task = list.tasks[idx];
+        task.done = !!markDone;
+        
+        // Reorganizar as tarefas mantendo a ordem personalizada
+        if(task.done) {
+          // Se foi marcada como concluída, adicionar ao início das concluídas
+          list.tasks = [...activeTasks, task, ...doneTasks];
+        } else {
+          // Se foi marcada como ativa, adicionar ao início das ativas
+          list.tasks = [task, ...activeTasks, ...doneTasks];
+        }
+        
+        saveState();
+        renderTasks();
+        // Garantir que o Sortable seja reativado após mudança de status
+        try{ initSortableTasks(); }catch(_){ }
+        renderLists();
+        requestSync(list.id);
+        
         // if we're in task detail for this task, update detail checkbox and text style
         if(currentTaskId===taskId && screenTaskDetail.classList.contains('active')){
           if(task.done){ taskDetailCheckbox.classList.add('checked'); taskDetailCheckbox.innerHTML='✓'; }
@@ -896,6 +926,7 @@
         let width = 0;
         let preventedScroll = false;
         let moved = false;
+        let isDragHandle = false;
 
         function setTranslate(x){
           node.style.transform = `translateX(${x}px)`;
@@ -916,6 +947,13 @@
 
         function onPointerDown(e){
           if(e.button !== undefined && e.button !== 0) return; // only left button
+          
+          // Verificar se o clique foi no drag handle ou próximo a ele
+          isDragHandle = e.target.classList.contains('drag-handle');
+          if (isDragHandle) {
+            return; // Não iniciar swipe se for no handle
+          }
+          
           dragging = true;
           moved = false;
           preventedScroll = false;
@@ -927,7 +965,7 @@
         }
 
         function onPointerMove(e){
-          if(!dragging) return;
+          if(!dragging || isDragHandle) return;
           const x = e.clientX || (e.touches && e.touches[0] && e.touches[0].clientX) || 0;
           const dx = x - startX;
           if(Math.abs(dx) > 6) moved = true;
@@ -944,7 +982,7 @@
         }
 
         function onPointerUp(e){
-          if(!dragging) return;
+          if(!dragging || isDragHandle) return;
           dragging = false;
           const endX = e.clientX || (e.changedTouches && e.changedTouches[0] && e.changedTouches[0].clientX) || currentX;
           const dx = Math.min(0, endX - startX);
@@ -1201,6 +1239,148 @@
           if(codeBackdrop && codeBackdrop.classList.contains('show')){ closeCodeModal(); }
         }
       });
+      
+      // Adicionar script Sortable.js para drag and drop
+      function loadSortableJS() {
+        return new Promise((resolve, reject) => {
+          if (window.Sortable) {
+            resolve(window.Sortable);
+            return;
+          }
+          
+          const script = document.createElement('script');
+          script.src = 'https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js';
+          script.async = true;
+          script.onload = () => resolve(window.Sortable);
+          script.onerror = reject;
+          document.head.appendChild(script);
+        });
+      }
+
+      // Função para inicializar a ordenação das listas
+      let listsSortable = null;
+      async function initSortableLists() {
+        try {
+          const Sortable = await loadSortableJS();
+          
+          if (listsSortable) {
+            listsSortable.destroy();
+          }
+          
+          listsSortable = new Sortable(listsContainer, {
+            animation: 150,
+            delay: 180,
+            delayOnTouchOnly: true,
+            touchStartThreshold: 3,
+            ghostClass: 'sortable-ghost',
+            chosenClass: 'sortable-chosen',
+            dragClass: 'sortable-drag',
+            onEnd: function(evt) {
+              // Atualizar a ordem das listas no array
+              const listElements = Array.from(listsContainer.querySelectorAll('.list-card'));
+              const newLists = [];
+              
+              listElements.forEach(el => {
+                const id = el.dataset.id;
+                const list = lists.find(l => l.id === id);
+                if (list) {
+                  newLists.push(list);
+                }
+              });
+              
+              lists = newLists;
+              saveState();
+            }
+          });
+        } catch (error) {
+          console.error('Erro ao inicializar Sortable para listas:', error);
+        }
+      }
+      
+      // Variáveis para guardar as instâncias de Sortable
+      let activeSortable = null;
+      let completedSortable = null;
+      
+      // Função para inicializar a ordenação das tarefas
+      async function initSortableTasks() {
+        try {
+          const Sortable = await loadSortableJS();
+          const list = lists.find(x=>x.id===currentListId);
+          if (!list) return;
+          
+          // Destruir instâncias anteriores se existirem
+          try{ if (activeSortable && activeSortable.el) { activeSortable.destroy(); } }catch(_){ }
+          try{ if (completedSortable && completedSortable.el) { completedSortable.destroy(); } }catch(_){ }
+          activeSortable = null;
+          completedSortable = null;
+          
+          // Inicializar ordenação para tarefas ativas
+          if (tasksContainer && tasksContainer.children.length > 1) {
+            activeSortable = new Sortable(tasksContainer, {
+              animation: 150,
+              delay: 180,
+              delayOnTouchOnly: true,
+              touchStartThreshold: 3,
+              filter: '.checkbox-round',
+              ghostClass: 'sortable-ghost',
+              chosenClass: 'sortable-chosen',
+              dragClass: 'sortable-drag',
+              onEnd: function(evt) {
+                // Reorganizar tarefas ativas
+                const taskElements = Array.from(tasksContainer.querySelectorAll('.task'));
+                const activeTasks = [];
+                const doneTasks = list.tasks.filter(t => t.done);
+                
+                taskElements.forEach(el => {
+                  const id = el.dataset.id;
+                  const task = list.tasks.find(t => t.id === id);
+                  if (task) {
+                    activeTasks.push(task);
+                  }
+                });
+                
+                list.tasks = [...activeTasks, ...doneTasks];
+                saveState();
+                requestSync(list.id);
+              }
+            });
+          }
+          
+          // Inicializar ordenação para tarefas concluídas
+          if (completedList && completedList.children.length > 0) {
+            completedSortable = new Sortable(completedList, {
+              animation: 150,
+              delay: 180,
+              delayOnTouchOnly: true,
+              touchStartThreshold: 3,
+              filter: '.checkbox-round',
+              ghostClass: 'sortable-ghost',
+              chosenClass: 'sortable-chosen',
+              dragClass: 'sortable-drag',
+              onEnd: function(evt) {
+                // Reorganizar tarefas concluídas
+                const taskElements = Array.from(completedList.querySelectorAll('.task'));
+                const activeTasks = list.tasks.filter(t => !t.done);
+                const doneTasks = [];
+                
+                taskElements.forEach(el => {
+                  const id = el.dataset.id;
+                  const task = list.tasks.find(t => t.id === id);
+                  if (task) {
+                    doneTasks.push(task);
+                  }
+                });
+                
+                list.tasks = [...activeTasks, ...doneTasks];
+                saveState();
+                requestSync(list.id);
+              }
+            });
+          }
+        } catch (error) {
+          console.error('Erro ao inicializar Sortable para tarefas:', error);
+        }
+      }
 
       // initial load
       loadState();
