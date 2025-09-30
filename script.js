@@ -57,6 +57,158 @@
       const confirmPrimary = el('confirmPrimary');
       const toastContainer = el('toastContainer');
 
+      // interaction guards
+      function preventNativeZoom(){
+        const stop = (evt)=>{ try{ evt.preventDefault(); }catch(_){ } };
+        try{
+          document.addEventListener('gesturestart', stop);
+          document.addEventListener('gesturechange', stop);
+          document.addEventListener('gestureend', stop);
+        }catch(_){ }
+        try{
+          window.addEventListener('wheel', (evt)=>{
+            if(evt.ctrlKey){ evt.preventDefault(); }
+          }, { passive:false });
+        }catch(_){ }
+        try{
+          document.addEventListener('touchmove', (evt)=>{
+            if(evt.touches && evt.touches.length>1){ evt.preventDefault(); }
+          }, { passive:false });
+        }catch(_){ }
+      }
+
+      const SCREEN_KEYS = Object.freeze({
+        LISTS: 'lists',
+        LIST_DETAIL: 'listDetail',
+        TASK_DETAIL: 'taskDetail'
+      });
+      let ignoreNextPopState = false;
+      let exitPromptOpen = false;
+
+      function pushHistoryState(screen, data){
+        try{
+          if(!window.history || !window.history.pushState){ return; }
+          const state = Object.assign({ screen }, data||{});
+          if(screen===SCREEN_KEYS.LISTS && typeof state.isRoot==='undefined'){
+            state.isRoot = false;
+          }
+          window.history.pushState(state, document.title);
+        }catch(_){ }
+      }
+
+      function replaceHistoryState(screen, data){
+        try{
+          if(!window.history || !window.history.replaceState){ return; }
+          const state = Object.assign({ screen }, data||{});
+          window.history.replaceState(state, document.title);
+        }catch(_){ }
+      }
+
+      function restoreRootGuard(){
+        pushHistoryState(SCREEN_KEYS.LISTS, { isRoot:false });
+        currentTaskId = null;
+        currentListId = null;
+        hideComposer();
+        showScreen(screenLists);
+        renderLists();
+      }
+
+      async function handleExitAttempt(){
+        if(exitPromptOpen){
+          return;
+        }
+        exitPromptOpen = true;
+        const shouldExit = await showConfirmDialog({
+          title: 'Sair do aplicativo',
+          message: 'Gostaria de sair?',
+          confirmText: 'Sair',
+          cancelText: 'Cancelar'
+        });
+        exitPromptOpen = false;
+        if(shouldExit){
+          ignoreNextPopState = true;
+          try{ window.close(); }catch(_){ }
+          try{ window.history.back(); }catch(_){ }
+        } else {
+          restoreRootGuard();
+        }
+      }
+
+      function applyStateFromHistory(state){
+        if(!state || !state.screen){
+          restoreRootGuard();
+          return;
+        }
+        switch(state.screen){
+          case SCREEN_KEYS.LISTS:
+            currentTaskId = null;
+            currentListId = null;
+            hideComposer();
+            showScreen(screenLists);
+            renderLists();
+            break;
+          case SCREEN_KEYS.LIST_DETAIL:
+            if(state.listId && lists.some(l=>l.id===state.listId)){
+              openList(state.listId, { fromHistory:true });
+            } else {
+              currentListId = null;
+              currentTaskId = null;
+              hideComposer();
+              showScreen(screenLists);
+              renderLists();
+            }
+            break;
+          case SCREEN_KEYS.TASK_DETAIL:
+            if(state.listId && lists.some(l=>l.id===state.listId)){
+              currentListId = state.listId;
+              openTaskDetail(state.taskId, { fromHistory:true });
+            } else {
+              currentListId = null;
+              currentTaskId = null;
+              hideComposer();
+              showScreen(screenLists);
+              renderLists();
+            }
+            break;
+          default:
+            currentListId = null;
+            currentTaskId = null;
+            hideComposer();
+            showScreen(screenLists);
+            renderLists();
+        }
+      }
+
+      function handlePopState(event){
+        if(ignoreNextPopState){
+          ignoreNextPopState = false;
+          return;
+        }
+        const state = event.state;
+        if(state && state.screen){
+          if(state.screen===SCREEN_KEYS.LISTS && state.isRoot){
+            handleExitAttempt();
+            return;
+          }
+          applyStateFromHistory(state);
+        } else {
+          handleExitAttempt();
+        }
+      }
+
+      function initHistory(){
+        try{
+          if(!window.history || !window.history.replaceState){ return; }
+          const initialState = window.history.state;
+          if(!initialState || !initialState.screen){
+            replaceHistoryState(SCREEN_KEYS.LISTS, { isRoot:true });
+            pushHistoryState(SCREEN_KEYS.LISTS, { isRoot:false });
+          } else if(initialState.screen===SCREEN_KEYS.LISTS && initialState.isRoot){
+            pushHistoryState(SCREEN_KEYS.LISTS, { isRoot:false });
+          }
+        }catch(_){ }
+      }
+
       // Code modal elements
       const codeBackdrop = el('codeBackdrop');
       const codeCancel = el('codeCancel');
@@ -345,7 +497,6 @@
         if(activeScreen===screenLists){
           updateSubtitle();
           globalBackBtn.hidden = true;
-          globalBackBtn.onclick = null;
           appTitle.hidden = false;
           appTitle.textContent = DEFAULT_TITLE;
           btnNewList.hidden = false;
@@ -354,7 +505,6 @@
           setAppMenuVisibility(false);
         } else if(activeScreen===screenListDetail){
           globalBackBtn.hidden = false;
-          globalBackBtn.onclick = handleBackToMain;
           appTitle.hidden = true;
           appTitle.textContent = '';
           btnNewList.hidden = true;
@@ -370,7 +520,6 @@
           }
         } else if(activeScreen===screenTaskDetail){
           globalBackBtn.hidden = false;
-          globalBackBtn.onclick = handleBackToList;
           const list = lists.find(x=>x.id===currentListId);
           if(list){
             appTitle.hidden = false;
@@ -384,20 +533,6 @@
           if(btnImportCode){ btnImportCode.style.display = "none"; }
           setAppMenuVisibility(false);
         }
-      }
-
-      function handleBackToMain(){
-        currentTaskId = null;
-        currentListId = null;
-        hideComposer();
-        showScreen(screenLists);
-      }
-
-      function handleBackToList(){
-        currentTaskId = null;
-        hideComposer();
-        showScreen(screenListDetail);
-        renderTasks();
       }
 
       function saveState(){ localStorage.setItem('todo_lists_v3', JSON.stringify(lists)); }
@@ -783,7 +918,8 @@
         closeModal();
       }
 
-      function openList(id){
+      function openList(id, options){
+        const opts = Object.assign({ fromHistory:false }, options||{});
         currentListId = id;
         const list = lists.find(x=>x.id===id);
         currentListName.textContent = list ? list.title : 'Lista';
@@ -791,9 +927,13 @@
         // ensure composer closed when opening
         hideComposer();
         showScreen(screenListDetail);
+        if(!opts.fromHistory){
+          pushHistoryState(SCREEN_KEYS.LIST_DETAIL, { listId: id });
+        }
       }
 
-      function openTaskDetail(taskId){
+      function openTaskDetail(taskId, options){
+        const opts = Object.assign({ fromHistory:false }, options||{});
         currentTaskId = taskId;
         const list = lists.find(x=>x.id===currentListId);
         if(!list) return;
@@ -814,6 +954,9 @@
             placeCaretAtEnd(taskDetailText); 
           }
         },120);
+        if(!opts.fromHistory){
+          pushHistoryState(SCREEN_KEYS.TASK_DETAIL, { listId: currentListId, taskId });
+        }
       }
 
       function placeCaretAtEnd(el){
@@ -1381,6 +1524,15 @@
           console.error('Erro ao inicializar Sortable para tarefas:', error);
         }
       }
+
+      if(globalBackBtn){
+        globalBackBtn.addEventListener('click', ()=>{
+          try{ window.history.back(); }catch(_){ }
+        });
+      }
+      window.addEventListener('popstate', handlePopState);
+      initHistory();
+      preventNativeZoom();
 
       // initial load
       loadState();

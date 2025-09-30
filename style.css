@@ -57,6 +57,17 @@ body{
   align-items:flex-start;
   justify-content:center;
   padding:var(--space-6) var(--gutter);
+  -webkit-user-select:none;
+  user-select:none;
+}
+
+input,
+textarea,
+select,
+[contenteditable="true"],
+.allow-text-selection{
+  -webkit-user-select:text;
+  user-select:text;
 }
 
 html.scroll-lock,
