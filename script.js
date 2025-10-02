@@ -4,6 +4,8 @@
       let currentListId = null;
       let currentTaskId = null;
       let completedCollapsed = false;
+      const COMPLETED_COLLAPSE_STORAGE_KEY = 'todo_completed_collapsed_v1';
+      let completedCollapseByList = {};
       let lastValidTaskText = '';
       const el = id=>document.getElementById(id);
       const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -538,6 +540,45 @@
       function saveState(){ localStorage.setItem('todo_lists_v3', JSON.stringify(lists)); }
       function loadState(){ try{ const raw = localStorage.getItem('todo_lists_v3'); if(raw){ lists = JSON.parse(raw); } }catch(e){ lists = []; } }
 
+      function saveCompletedCollapseState(){
+        try{ localStorage.setItem(COMPLETED_COLLAPSE_STORAGE_KEY, JSON.stringify(completedCollapseByList)); }
+        catch(_){ }
+      }
+
+      function loadCompletedCollapseState(){
+        try{
+          const raw = localStorage.getItem(COMPLETED_COLLAPSE_STORAGE_KEY);
+          if(!raw){ completedCollapseByList = {}; return; }
+          const parsed = JSON.parse(raw);
+          completedCollapseByList = (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+        }catch(_){
+          completedCollapseByList = {};
+        }
+      }
+
+      function getCompletedCollapseForList(listId){
+        if(!listId) return false;
+        return !!completedCollapseByList[listId];
+      }
+
+      function setCompletedCollapseForList(listId, collapsed){
+        if(!listId) return;
+        if(collapsed){
+          completedCollapseByList[listId] = true;
+        } else {
+          delete completedCollapseByList[listId];
+        }
+        saveCompletedCollapseState();
+      }
+
+      function removeCompletedCollapseState(listId){
+        if(!listId) return;
+        if(Object.prototype.hasOwnProperty.call(completedCollapseByList, listId)){
+          delete completedCollapseByList[listId];
+          saveCompletedCollapseState();
+        }
+      }
+
       function hideAppMenu(){
         if(!isMenuOpen) return;
         appMenu.hidden = true;
@@ -968,6 +1009,7 @@
         tasksContainer.innerHTML=''; completedList.innerHTML='';
         const list = lists.find(x=>x.id===currentListId);
         if(!list) return;
+        completedCollapsed = getCompletedCollapseForList(list.id);
         const active = list.tasks.filter(t=>!t.done);
         const done = list.tasks.filter(t=>t.done);
 
@@ -1243,6 +1285,7 @@
         const idx = lists.findIndex(x=>x.id===currentListId);
         if(idx===-1) return;
         const list = lists[idx];
+        removeCompletedCollapseState(list && list.id);
         // tentativa de exclusão remota (best-effort)
         try{
           if(list && list.shareCode && !list.imported && typeof window !== 'undefined' && typeof window.firebaseDeleteList === 'function'){
@@ -1291,7 +1334,13 @@
       // clicking backdrop closes composer (but not modal backdrop)
       composerBackdrop.addEventListener('click', (e)=>{ if(e.target===composerBackdrop) hideComposer(); });
 
-      completedHeader.addEventListener('click', ()=>{ completedCollapsed = !completedCollapsed; renderTasks(); });
+      completedHeader.addEventListener('click', ()=>{
+        if(!currentListId) return;
+        const nextCollapsed = !getCompletedCollapseForList(currentListId);
+        completedCollapsed = nextCollapsed;
+        setCompletedCollapseForList(currentListId, nextCollapsed);
+        renderTasks();
+      });
 
       appMenuBtn.addEventListener('click', toggleAppMenu);
       shareListAction.addEventListener('click', ()=>{ hideAppMenu(); openShareDialog(); });
@@ -1536,6 +1585,7 @@
 
       // initial load
       loadState();
+      loadCompletedCollapseState();
       renderLists();
       updateSubtitle();
       updateAppBar(screenLists);
