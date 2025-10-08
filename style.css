@@ -313,8 +313,8 @@ button.btn:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
   border-radius:var(--radius-sm);
   border:1px solid var(--border);
   display:flex;
-  align-items:stretch;
-  gap:0;
+  align-items:center;
+  gap:var(--space-3);
   background:var(--card);
   box-shadow:var(--shadow-sm);
   transition:background var(--transition-fast), transform var(--transition-fast);
@@ -324,34 +324,6 @@ button.btn:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 .task.swipe-anim{transition:transform .18s ease}
 .task .text{flex:1;line-height:1.4}
 .task.done .text{text-decoration:line-through;color:var(--muted)}
-
-/* swipe background layer */
-.task .swipe-bg{
-  position:absolute;
-  inset:0;
-  border-radius:var(--radius-sm);
-  background:#FEE2E2; /* red-100 */
-  border:1px solid #FCA5A5; /* red-300 */
-  display:flex;
-  align-items:center;
-  justify-content:flex-end;
-  padding-right:16px;
-  color:#DC2626; /* red-600 */
-  pointer-events:none;
-  opacity:0;
-  transition:opacity .18s ease;
-}
-.task .swipe-bg svg{width:22px;height:22px}
-
-/* swipe content layer */
-.task .task-content{
-  position:relative;
-  z-index:1;
-  display:flex;
-  align-items:center;
-  gap:var(--space-3);
-  width:100%;
-}
 
 /* round checkbox */
 .checkbox-round{
@@ -501,10 +473,6 @@ button.btn:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
   box-shadow: var(--shadow-md);
   z-index: 999;
 }
-
-/* Android: esconder o "fantasma" original para que apenas o item arrastado siga o dedo */
-.android .sortable-chosen{opacity:0 !important}
-.android .sortable-ghost{opacity:0 !important}
 
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{transition-duration:0.001ms !important;animation-duration:0.001ms !important}

@@ -61,14 +61,6 @@
       const confirmPrimary = el('confirmPrimary');
       const toastContainer = el('toastContainer');
 
-      // Plataforma: marcar <html> quando Android para ajustes visuais de drag
-      try{
-        const ua = (navigator && navigator.userAgent) ? navigator.userAgent : '';
-        if(/Android/i.test(ua)){
-          document.documentElement.classList.add('android');
-        }
-      }catch(_){ }
-
       // interaction guards
       function preventNativeZoom(){
         const stop = (evt)=>{ try{ evt.preventDefault(); }catch(_){ } };
@@ -302,14 +294,10 @@
             const sorter = (a,b)=>{
               const ra = localRank[a.key];
               const rb = localRank[b.key];
-              const aHas = (ra!=null);
-              const bHas = (rb!=null);
-              if(aHas && bHas){ return ra - rb; }
-              if(!aHas && !bHas){ return a.idx - b.idx; }
-              // novos itens (sem rank local) vêm antes dos ranqueados
-              if(!aHas && bHas) return -1;
-              if(aHas && !bHas) return 1;
-              return 0;
+              if(ra!=null && rb!=null){ return ra - rb; }
+              if(ra!=null) return -1;
+              if(rb!=null) return 1;
+              return a.idx - b.idx;
             };
             indexedActive.sort(sorter);
             indexedDone.sort(sorter);
@@ -451,17 +439,6 @@
           clearTimeout(timer);
           remove();
         });
-      }
-
-      // Emissor de eventos de integração
-      function emitEvent(payload){
-        try{
-          const detail = Object.assign({}, payload);
-          document.dispatchEvent(new CustomEvent('app-event', { detail }));
-          if(typeof window !== 'undefined' && typeof window.onAppEvent === 'function'){
-            try{ window.onAppEvent(detail); }catch(_){ }
-          }
-        }catch(_){ }
       }
 
       // Keyboard avoidance for overlays (modals/composer/share)
@@ -1118,23 +1095,15 @@
         else{
           active.forEach(t=>{
             const node = document.createElement('div'); node.className='task'; node.dataset.id=t.id;
-            // fundo para swipe
-            const bg = document.createElement('div'); bg.className='swipe-bg'; bg.setAttribute('aria-hidden','true');
-            bg.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7zm3-3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1h5v2H4V5h5V4z" fill="currentColor"/></svg>';
-            // conteúdo deslizável
-            const content = document.createElement('div'); content.className='task-content';
             const cb = document.createElement('button'); cb.className='checkbox-round'; cb.setAttribute('aria-pressed','false'); cb.title='Marcar como concluída';
             cb.addEventListener('click', (ev)=>{ ev.stopPropagation(); animateAndToggle(cb, t.id, true); });
             const txt = document.createElement('div'); txt.className='text'; txt.textContent=t.text;
             // clicking the text opens detail
             txt.addEventListener('click', (ev)=>{ ev.stopPropagation(); openTaskDetail(t.id); });
 
-            content.appendChild(cb);
-            content.appendChild(txt);
-            node.appendChild(bg);
-            node.appendChild(content);
+            node.appendChild(cb); 
+            node.appendChild(txt);
             tasksContainer.appendChild(node);
-            attachSwipeToDelete(content, t.id, node);
           });
         }
 
@@ -1148,19 +1117,13 @@
 
           done.forEach(t=>{
             const node = document.createElement('div'); node.className='task done'; node.dataset.id=t.id;
-            const bg = document.createElement('div'); bg.className='swipe-bg'; bg.setAttribute('aria-hidden','true');
-            bg.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7zm3-3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1h5v2H4V5h5V4z" fill="currentColor"/></svg>';
-            const content = document.createElement('div'); content.className='task-content';
             const cb = document.createElement('button'); cb.className='checkbox-round checked'; cb.setAttribute('aria-pressed','true'); cb.title='Desmarcar'; cb.innerHTML='✓'; cb.addEventListener('click', (ev)=>{ ev.stopPropagation(); animateAndToggle(cb, t.id, false); });
             const txt = document.createElement('div'); txt.className='text'; txt.textContent=t.text;
             txt.addEventListener('click', (ev)=>{ ev.stopPropagation(); openTaskDetail(t.id); });
 
-            content.appendChild(cb);
-            content.appendChild(txt);
-            node.appendChild(bg);
-            node.appendChild(content);
+            node.appendChild(cb); 
+            node.appendChild(txt);
             completedList.appendChild(node);
-            attachSwipeToDelete(content, t.id, node);
           });
         } else {
           completedGroup.style.display='none';
@@ -1220,7 +1183,7 @@
         saveState(); renderTasks(); renderLists(); requestSync(list.id);
       }
 
-      function attachSwipeToDelete(contentNode, taskId, containerNode){
+      function attachSwipeToDelete(node, taskId){
         let startX = 0;
         let currentX = 0;
         let dragging = false;
@@ -1230,19 +1193,20 @@
         let isDragHandle = false;
 
         function setTranslate(x){
-          contentNode.style.transform = `translateX(${x}px)`;
+          node.style.transform = `translateX(${x}px)`;
         }
 
         function setProgressBg(ratio){
           const clamped = Math.max(0, Math.min(1, ratio));
-          const bg = containerNode && containerNode.querySelector('.swipe-bg');
-          if(bg){ bg.style.opacity = String(Math.max(0.1, 0.15 + clamped * 0.85)); }
+          const alpha = 0.08 + clamped * 0.6; // start slight red, get stronger
+          node.style.background = `rgba(255,0,0,${alpha})`;
+          node.style.borderColor = `rgba(255,0,0,${Math.min(0.35 + clamped * 0.4, 0.8)})`;
         }
 
         function clearStyles(){
-          contentNode.style.transform = '';
-          const bg = containerNode && containerNode.querySelector('.swipe-bg');
-          if(bg){ bg.style.opacity = ''; }
+          node.style.transform = '';
+          node.style.background = '';
+          node.style.borderColor = '';
         }
 
         function onPointerDown(e){
@@ -1259,9 +1223,9 @@
           preventedScroll = false;
           startX = e.clientX || (e.touches && e.touches[0] && e.touches[0].clientX) || 0;
           currentX = startX;
-          width = contentNode.offsetWidth || 1;
-          try{ contentNode.setPointerCapture && contentNode.setPointerCapture(e.pointerId); }catch(_){ }
-          contentNode.classList.remove('swipe-anim');
+          width = node.offsetWidth || 1;
+          try{ node.setPointerCapture && node.setPointerCapture(e.pointerId); }catch(_){ }
+          node.classList.remove('swipe-anim');
         }
 
         function onPointerMove(e){
@@ -1287,29 +1251,25 @@
           const endX = e.clientX || (e.changedTouches && e.changedTouches[0] && e.changedTouches[0].clientX) || currentX;
           const dx = Math.min(0, endX - startX);
           const ratio = Math.min(Math.abs(dx) / (width || 1), 1);
-          contentNode.classList.add('swipe-anim');
+          node.classList.add('swipe-anim');
           if(ratio > 0.5){
             // animate out then delete
             setTranslate(-Math.max(width * 1.2, 200));
-            // emitir evento confirmado
-            emitEvent({ event:'delete_attempt', item_id: taskId, gesture: 'swipe_right_to_left', confirmed: true });
             setTimeout(()=>{ deleteTask(taskId); }, 160);
           } else {
             // revert
             setTranslate(0);
             setProgressBg(0);
-            setTimeout(()=>{ clearStyles(); contentNode.classList.remove('swipe-anim'); }, 180);
-            // emitir evento não confirmado
-            emitEvent({ event:'delete_attempt', item_id: taskId, gesture: 'swipe_right_to_left', confirmed: false });
+            setTimeout(()=>{ clearStyles(); node.classList.remove('swipe-anim'); }, 180);
           }
         }
 
-        contentNode.addEventListener('pointerdown', onPointerDown, { passive: true });
-        contentNode.addEventListener('pointermove', onPointerMove);
-        contentNode.addEventListener('pointerup', onPointerUp);
-        contentNode.addEventListener('pointercancel', onPointerUp);
+        node.addEventListener('pointerdown', onPointerDown, { passive: true });
+        node.addEventListener('pointermove', onPointerMove);
+        node.addEventListener('pointerup', onPointerUp);
+        node.addEventListener('pointercancel', onPointerUp);
         // prevent accidental click after swipe
-        contentNode.addEventListener('click', (ev)=>{ if(moved){ ev.stopPropagation(); ev.preventDefault(); } });
+        node.addEventListener('click', (ev)=>{ if(moved){ ev.stopPropagation(); ev.preventDefault(); } });
       }
 
       // Composer controls (overlay)
@@ -1639,23 +1599,6 @@
               ghostClass: 'sortable-ghost',
               chosenClass: 'sortable-chosen',
               dragClass: 'sortable-drag',
-              fallbackOnBody: true,
-              forceFallback: true,
-              onStart: function(evt){
-                try{
-                  const fromIndex = evt.oldIndex != null ? evt.oldIndex : Array.prototype.indexOf.call(tasksContainer.children, evt.item);
-                  const id = evt.item && evt.item.dataset ? evt.item.dataset.id : null;
-                  emitEvent({ event:'drag_start', item_id: id, from_index: fromIndex, to_index: fromIndex, animation:{ type:'smooth_follow', duration_ms:150 } });
-                }catch(_){ }
-              },
-              onMove: function(evt){
-                try{
-                  const ghost = tasksContainer.querySelector('.sortable-ghost');
-                  const toIndex = ghost ? Array.prototype.indexOf.call(tasksContainer.children, ghost) : Array.prototype.indexOf.call(tasksContainer.children, evt.related);
-                  const id = evt.dragged && evt.dragged.dataset ? evt.dragged.dataset.id : null;
-                  emitEvent({ event:'drag_update', item_id: id, from_index: evt.oldIndex ?? null, to_index: toIndex, animation:{ type:'smooth_follow', duration_ms:150 } });
-                }catch(_){ }
-              },
               onEnd: function(evt) {
                 // Reorganizar tarefas ativas
                 const taskElements = Array.from(tasksContainer.querySelectorAll('.task'));
@@ -1674,10 +1617,6 @@
                 updateLocalOrderForList(list.id);
                 saveState();
                 requestSync(list.id);
-                try{
-                  const id = evt.item && evt.item.dataset ? evt.item.dataset.id : null;
-                  emitEvent({ event:'drag_end', item_id: id, from_index: evt.oldIndex ?? null, to_index: evt.newIndex ?? null, animation:{ type:'smooth_follow', duration_ms:150 } });
-                }catch(_){ }
               }
             });
           }
@@ -1693,23 +1632,6 @@
               ghostClass: 'sortable-ghost',
               chosenClass: 'sortable-chosen',
               dragClass: 'sortable-drag',
-              fallbackOnBody: true,
-              forceFallback: true,
-              onStart: function(evt){
-                try{
-                  const fromIndex = evt.oldIndex != null ? evt.oldIndex : Array.prototype.indexOf.call(completedList.children, evt.item);
-                  const id = evt.item && evt.item.dataset ? evt.item.dataset.id : null;
-                  emitEvent({ event:'drag_start', item_id: id, from_index: fromIndex, to_index: fromIndex, animation:{ type:'smooth_follow', duration_ms:150 } });
-                }catch(_){ }
-              },
-              onMove: function(evt){
-                try{
-                  const ghost = completedList.querySelector('.sortable-ghost');
-                  const toIndex = ghost ? Array.prototype.indexOf.call(completedList.children, ghost) : Array.prototype.indexOf.call(completedList.children, evt.related);
-                  const id = evt.dragged && evt.dragged.dataset ? evt.dragged.dataset.id : null;
-                  emitEvent({ event:'drag_update', item_id: id, from_index: evt.oldIndex ?? null, to_index: toIndex, animation:{ type:'smooth_follow', duration_ms:150 } });
-                }catch(_){ }
-              },
               onEnd: function(evt) {
                 // Reorganizar tarefas concluídas
                 const taskElements = Array.from(completedList.querySelectorAll('.task'));
@@ -1728,10 +1650,6 @@
                 updateLocalOrderForList(list.id);
                 saveState();
                 requestSync(list.id);
-                try{
-                  const id = evt.item && evt.item.dataset ? evt.item.dataset.id : null;
-                  emitEvent({ event:'drag_end', item_id: id, from_index: evt.oldIndex ?? null, to_index: evt.newIndex ?? null, animation:{ type:'smooth_follow', duration_ms:150 } });
-                }catch(_){ }
               }
             });
           }
