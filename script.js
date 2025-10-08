@@ -5,7 +5,9 @@
       let currentTaskId = null;
       let completedCollapsed = false;
       const COMPLETED_COLLAPSE_STORAGE_KEY = 'todo_completed_collapsed_v1';
+      const LOCAL_ORDER_STORAGE_KEY = 'todo_local_order_v1';
       let completedCollapseByList = {};
+      let localOrderByList = {};
       let lastValidTaskText = '';
       const el = id=>document.getElementById(id);
       const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -275,14 +277,38 @@
           subscribeFn(code, (remote)=>{
             if(!remote) return;
             const pushedAt = list._lastPushedAt || 0;
-          const remoteAt = (remote && remote.updatedAt) ? Number(remote.updatedAt) : 0;
-          if(remoteAt && pushedAt && Math.abs(remoteAt - pushedAt) < 600){ return; }
+            const remoteAt = (remote && remote.updatedAt) ? Number(remote.updatedAt) : 0;
+            if(remoteAt && pushedAt && Math.abs(remoteAt - pushedAt) < 600){ return; }
             const newTitle = remote.title || 'Lista';
-            const newTasks = Array.isArray(remote.tasks)
-              ? remote.tasks.map((t, idx)=>({ id: 't_'+Date.now()+'_'+idx, text: t && t.text ? String(t.text) : '', done: !!(t && t.done) }))
+            const incoming = Array.isArray(remote.tasks)
+              ? remote.tasks.map((t)=>({ text: t && t.text ? String(t.text) : '', done: !!(t && t.done) }))
               : [];
+            // Preservar ordenação local por usuário: ordenar incoming por ranking local quando existir
+            const localRank = getLocalOrderForList(list.id);
+            const incomingActive = incoming.filter(t=>!t.done);
+            const incomingDone = incoming.filter(t=>t.done);
+            const keysActive = buildTaskKeys(incomingActive);
+            const keysDone = buildTaskKeys(incomingDone);
+            const indexedActive = incomingActive.map((t, idx)=>({ t, key: keysActive[idx], idx }));
+            const indexedDone = incomingDone.map((t, idx)=>({ t, key: keysDone[idx], idx }));
+            const sorter = (a,b)=>{
+              const ra = localRank[a.key];
+              const rb = localRank[b.key];
+              if(ra!=null && rb!=null){ return ra - rb; }
+              if(ra!=null) return -1;
+              if(rb!=null) return 1;
+              return a.idx - b.idx;
+            };
+            indexedActive.sort(sorter);
+            indexedDone.sort(sorter);
+            const nowTs = Date.now();
+            const rebuilt = [
+              ...indexedActive.map((x, i)=>({ id: 't_'+nowTs+'_'+i, text: x.t.text, done: false })),
+              ...indexedDone.map((x, i)=>({ id: 't_'+nowTs+'_'+'d'+i, text: x.t.text, done: true }))
+            ];
             list.title = newTitle;
-            list.tasks = newTasks;
+            list.tasks = rebuilt;
+            updateLocalOrderForList(list.id);
             saveState();
             renderLists();
             if(currentListId === list.id){
@@ -539,6 +565,58 @@
 
       function saveState(){ localStorage.setItem('todo_lists_v3', JSON.stringify(lists)); }
       function loadState(){ try{ const raw = localStorage.getItem('todo_lists_v3'); if(raw){ lists = JSON.parse(raw); } }catch(e){ lists = []; } }
+
+      // Persistência de ordenação local (por dispositivo/usuário)
+      function saveLocalOrderState(){
+        try{ localStorage.setItem(LOCAL_ORDER_STORAGE_KEY, JSON.stringify(localOrderByList)); }
+        catch(_){ }
+      }
+      function loadLocalOrderState(){
+        try{
+          const raw = localStorage.getItem(LOCAL_ORDER_STORAGE_KEY);
+          localOrderByList = raw ? (JSON.parse(raw) || {}) : {};
+          if(typeof localOrderByList !== 'object' || Array.isArray(localOrderByList)){
+            localOrderByList = {};
+          }
+        }catch(_){ localOrderByList = {}; }
+      }
+      function getLocalOrderForList(listId){
+        if(!listId) return {};
+        const map = localOrderByList[listId];
+        return (map && typeof map === 'object' && !Array.isArray(map)) ? map : {};
+      }
+      function setLocalOrderForList(listId, map){
+        if(!listId) return;
+        if(!localOrderByList || typeof localOrderByList !== 'object'){ localOrderByList = {}; }
+        localOrderByList[listId] = map || {};
+        saveLocalOrderState();
+      }
+      function removeLocalOrderState(listId){
+        if(!listId) return;
+        if(localOrderByList && Object.prototype.hasOwnProperty.call(localOrderByList, listId)){
+          delete localOrderByList[listId];
+          saveLocalOrderState();
+        }
+      }
+      function normalizeTextKey(text){
+        try{ return String(text||'').trim(); }catch(_){ return ''; }
+      }
+      function buildTaskKeys(tasks){
+        const counterByKey = Object.create(null);
+        return (tasks||[]).map((t)=>{
+          const base = (t && t.done ? '1' : '0') + '|' + normalizeTextKey(t && t.text);
+          const count = (counterByKey[base]||0) + 1;
+          counterByKey[base] = count;
+          return base + '|' + count; // chave composta com índice de ocorrência
+        });
+      }
+      function updateLocalOrderForList(listId){
+        const list = lists.find(x=>x && x.id===listId); if(!list) return;
+        const keys = buildTaskKeys(list.tasks||[]);
+        const map = {};
+        for(let i=0;i<keys.length;i++){ map[keys[i]] = (i+1); }
+        setLocalOrderForList(listId, map);
+      }
 
       function saveCompletedCollapseState(){
         try{ localStorage.setItem(COMPLETED_COLLAPSE_STORAGE_KEY, JSON.stringify(completedCollapseByList)); }
@@ -1081,7 +1159,7 @@
           // Se foi marcada como ativa, adicionar ao início das ativas
           list.tasks = [task, ...activeTasks, ...doneTasks];
         }
-        
+        updateLocalOrderForList(list.id);
         saveState();
         renderTasks();
         // Garantir que o Sortable seja reativado após mudança de status
@@ -1101,6 +1179,7 @@
         const list = lists.find(x=>x.id===currentListId); if(!list) return;
         const idx = list.tasks.findIndex(t=>t.id===taskId); if(idx===-1) return;
         list.tasks.splice(idx,1);
+        updateLocalOrderForList(list.id);
         saveState(); renderTasks(); renderLists(); requestSync(list.id);
       }
 
@@ -1222,6 +1301,7 @@
         const list = lists.find(x=>x.id===currentListId); if(!list) return;
         // add to top of active tasks
         list.tasks.unshift({id:'t_'+Date.now(), text, done:false});
+        updateLocalOrderForList(list.id);
         composerInput.value=''; sendTask.disabled=true; saveState(); renderTasks(); renderLists();
         requestSync(list.id);
         // keep composer open and keep keyboard up by focusing again quickly
@@ -1266,6 +1346,7 @@
           task.text = taskDetailText.textContent;
           lastValidTaskText = task.text;
         }
+        updateLocalOrderForList(list.id);
         saveState(); renderLists(); renderTasks(); requestSync(list.id);
       });
 
@@ -1295,6 +1376,7 @@
         }catch(e){ }
         // exclusão local
         stopRealtimeForList(list.id);
+        removeLocalOrderState(list && list.id);
         lists.splice(idx,1);
         saveState();
         currentTaskId = null;
@@ -1532,6 +1614,7 @@
                 });
                 
                 list.tasks = [...activeTasks, ...doneTasks];
+                updateLocalOrderForList(list.id);
                 saveState();
                 requestSync(list.id);
               }
@@ -1564,6 +1647,7 @@
                 });
                 
                 list.tasks = [...activeTasks, ...doneTasks];
+                updateLocalOrderForList(list.id);
                 saveState();
                 requestSync(list.id);
               }
@@ -1586,6 +1670,7 @@
       // initial load
       loadState();
       loadCompletedCollapseState();
+      loadLocalOrderState();
       renderLists();
       updateSubtitle();
       updateAppBar(screenLists);
