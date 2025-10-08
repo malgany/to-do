@@ -302,10 +302,14 @@
             const sorter = (a,b)=>{
               const ra = localRank[a.key];
               const rb = localRank[b.key];
-              if(ra!=null && rb!=null){ return ra - rb; }
-              if(ra!=null) return -1;
-              if(rb!=null) return 1;
-              return a.idx - b.idx;
+              const aHas = (ra!=null);
+              const bHas = (rb!=null);
+              if(aHas && bHas){ return ra - rb; }
+              if(!aHas && !bHas){ return a.idx - b.idx; }
+              // novos itens (sem rank local) vêm antes dos ranqueados
+              if(!aHas && bHas) return -1;
+              if(aHas && !bHas) return 1;
+              return 0;
             };
             indexedActive.sort(sorter);
             indexedDone.sort(sorter);
