@@ -264,7 +264,8 @@
             try{
               const code = String(list.shareCode||'').replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
               list._lastPushedAt = Date.now();
-              await window.firebaseShareList(code, { title: list.title, tasks: list.tasks });
+              const payload = buildSyncPayload(list);
+              await window.firebaseShareList(code, payload);
             }catch(e){ /* ignore sync errors */ }
             finally{ syncTimers[listId] = null; }
           }, wait);
@@ -295,11 +296,7 @@
             if(remoteAt && pushedAt && Math.abs(remoteAt - pushedAt) < 600){ return; }
             const newTitle = remote.title || 'Lista';
             const incoming = Array.isArray(remote.tasks)
-              ? remote.tasks.map((t)=>({
-                text: t && t.text ? String(t.text) : '',
-                done: !!(t && t.done),
-                photos: Array.isArray(t && t.photos) ? t.photos : []
-              }))
+              ? remote.tasks.map((task)=> normalizeIncomingTaskData(task))
               : [];
             // Preservar ordenação local por usuário: ordenar incoming por ranking local quando existir
             const localRank = getLocalOrderForList(list.id);
@@ -319,14 +316,13 @@
             };
             indexedActive.sort(sorter);
             indexedDone.sort(sorter);
-            const nowTs = Date.now();
-            const rebuilt = [
-              ...indexedActive.map((x, i)=>({ id: 't_'+nowTs+'_'+i, text: x.t.text, done: false, photos: x.t.photos || [] })),
-              ...indexedDone.map((x, i)=>({ id: 't_'+nowTs+'_'+'d'+i, text: x.t.text, done: true, photos: x.t.photos || [] }))
+            const orderedIncoming = [
+              ...indexedActive.map((x)=> x.t),
+              ...indexedDone.map((x)=> x.t)
             ];
-            rebuilt.forEach((task)=> ensureTaskStructure(task));
+            const mergedTasks = mergeIncomingTasks(list, orderedIncoming);
             list.title = newTitle;
-            list.tasks = rebuilt;
+            list.tasks = mergedTasks;
             updateLocalOrderForList(list.id);
             saveState();
             renderLists();
@@ -868,6 +864,90 @@
           });
         }
         task.photos = normalizedPhotos.slice(0, MAX_PHOTOS_PER_TASK);
+      }
+
+      function sanitizePhotoArrayForMerge(photos){
+        const tmpTask = { id: 'tmp', text: '', done: false, photos: Array.isArray(photos) ? photos : [] };
+        ensureTaskStructure(tmpTask);
+        return tmpTask.photos.map((photo)=>({ id: photo.id, dataUrl: photo.dataUrl, createdAt: photo.createdAt }));
+      }
+
+      function mergePhotoArrays(remotePhotos, localPhotos){
+        const remoteList = sanitizePhotoArrayForMerge(remotePhotos);
+        const localList = sanitizePhotoArrayForMerge(localPhotos);
+        const combined = [];
+        const seen = new Set();
+        remoteList.forEach((photo)=>{
+          if(!seen.has(photo.id)){
+            combined.push(photo);
+            seen.add(photo.id);
+          }
+        });
+        localList.forEach((photo)=>{
+          if(!seen.has(photo.id)){
+            combined.push(photo);
+            seen.add(photo.id);
+          }
+        });
+        return combined.slice(0, MAX_PHOTOS_PER_TASK);
+      }
+
+      function normalizeIncomingTaskData(task){
+        return {
+          text: task && typeof task.text === 'string' ? task.text : '',
+          done: !!(task && task.done),
+          photos: sanitizePhotoArrayForMerge(task && task.photos)
+        };
+      }
+
+      function mergeIncomingTasks(list, incomingTasks){
+        const result = [];
+        const localTasks = Array.isArray(list && list.tasks) ? list.tasks.slice() : [];
+        const localKeys = buildTaskKeys(localTasks);
+        const buckets = Object.create(null);
+        localTasks.forEach((task, idx)=>{
+          const key = localKeys[idx];
+          if(!buckets[key]){ buckets[key] = []; }
+          buckets[key].push(task);
+        });
+        const incomingKeys = buildTaskKeys(incomingTasks);
+        const baseTs = Date.now();
+        incomingTasks.forEach((incomingTask, idx)=>{
+          const key = incomingKeys[idx];
+          const bucket = buckets[key];
+          const localTask = bucket && bucket.length ? bucket.shift() : null;
+          if(localTask){
+            localTask.text = incomingTask.text;
+            localTask.done = incomingTask.done;
+            localTask.photos = mergePhotoArrays(incomingTask.photos, localTask.photos);
+            ensureTaskStructure(localTask);
+            result.push(localTask);
+          } else {
+            const newTask = {
+              id: 't_'+baseTs+'_'+idx,
+              text: incomingTask.text,
+              done: incomingTask.done,
+              photos: mergePhotoArrays(incomingTask.photos, [])
+            };
+            ensureTaskStructure(newTask);
+            result.push(newTask);
+          }
+        });
+        return result;
+      }
+
+      function buildSyncPayload(list){
+        const title = list && typeof list.title === 'string' ? list.title : 'Lista';
+        const sourceTasks = Array.isArray(list && list.tasks) ? list.tasks : [];
+        const tasks = sourceTasks.map((task)=>{
+          ensureTaskStructure(task);
+          return {
+            text: typeof task.text === 'string' ? task.text : '',
+            done: !!task.done,
+            photos: sanitizePhotoArrayForMerge(task.photos)
+          };
+        });
+        return { title, tasks };
       }
 
       function ensureListsStructure(){
@@ -1852,15 +1932,21 @@
             }
             const id = 'l_'+Date.now();
             const title = remote.title || 'Lista Importada';
-            const tasks = Array.isArray(remote.tasks)
-              ? remote.tasks.map((t, idx)=>({
-                id: 't_'+Date.now()+'_'+idx,
-                text: t && t.text ? String(t.text) : '',
-                done: !!(t && t.done),
-                photos: Array.isArray(t && t.photos) ? t.photos : []
-              }))
-              : [];
-            tasks.forEach((task)=> ensureTaskStructure(task));
+            const tasks = [];
+            if(Array.isArray(remote.tasks)){
+              const baseTs = Date.now();
+              remote.tasks.forEach((t, idx)=>{
+                const normalizedTask = normalizeIncomingTaskData(t);
+                const task = {
+                  id: 't_'+baseTs+'_'+idx,
+                  text: normalizedTask.text,
+                  done: normalizedTask.done,
+                  photos: normalizedTask.photos
+                };
+                ensureTaskStructure(task);
+                tasks.push(task);
+              });
+            }
             const newList = { id, title, tasks, shareCode: normalized, imported: true };
             lists.push(newList);
             saveState(); renderLists(); closeCodeModal(); openList(id);

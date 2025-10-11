@@ -243,16 +243,120 @@
     });
     const firebaseDb = getDatabase(firebaseApp);
 
+    const MAX_SHARED_PHOTOS = 4;
+    const MAX_SHARED_PHOTO_DATA_LENGTH = 400000; // ~400 KB
+    const MAX_SHARED_PAYLOAD_SIZE = 7 * 1024 * 1024; // 7 MB
+
+    function createSharedPhotoId(){
+      return 'p_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2, 8);
+    }
+
+    function sanitizeSharedPhoto(photo, seenIds){
+      if(!photo || typeof photo !== 'object') return null;
+      const rawDataUrl = typeof photo.dataUrl === 'string' ? photo.dataUrl.trim() : '';
+      if(!rawDataUrl || rawDataUrl.length > MAX_SHARED_PHOTO_DATA_LENGTH){
+        return null;
+      }
+      let id = typeof photo.id === 'string' ? photo.id.trim() : '';
+      if(!id){ id = createSharedPhotoId(); }
+      while(seenIds.has(id)){ id = createSharedPhotoId(); }
+      const createdAtNum = Number(photo.createdAt);
+      return {
+        id,
+        dataUrl: rawDataUrl,
+        createdAt: Number.isFinite(createdAtNum) ? createdAtNum : Date.now()
+      };
+    }
+
+    function sanitizeSharedTask(task){
+      const photos = [];
+      const seen = new Set();
+      if(task && Array.isArray(task.photos)){
+        for(const entry of task.photos){
+          const sanitized = sanitizeSharedPhoto(entry, seen);
+          if(sanitized){
+            seen.add(sanitized.id);
+            photos.push(sanitized);
+            if(photos.length >= MAX_SHARED_PHOTOS){ break; }
+          }
+        }
+      }
+      return {
+        text: task && typeof task.text === 'string' ? task.text : '',
+        done: !!(task && task.done),
+        photos
+      };
+    }
+
+    function trimSharedPayloadToLimit(payload){
+      if(!payload || !Array.isArray(payload.tasks)){
+        return payload;
+      }
+      const photoRefs = [];
+      payload.tasks.forEach((task)=>{
+        if(!Array.isArray(task.photos)){
+          task.photos = [];
+          return;
+        }
+        const unique = [];
+        const seen = new Set();
+        task.photos.forEach((photo)=>{
+          if(photo && !seen.has(photo.id)){
+            seen.add(photo.id);
+            unique.push(photo);
+          }
+        });
+        task.photos = unique;
+        unique.forEach((photo)=>{ photoRefs.push({ task, photo }); });
+      });
+      let serialized = '';
+      try{ serialized = JSON.stringify(payload); }
+      catch(_){ serialized = ''; }
+      photoRefs.sort((a,b)=>{
+        const lenA = (a.photo && typeof a.photo.dataUrl === 'string') ? a.photo.dataUrl.length : 0;
+        const lenB = (b.photo && typeof b.photo.dataUrl === 'string') ? b.photo.dataUrl.length : 0;
+        return lenB - lenA;
+      });
+      while(serialized.length > MAX_SHARED_PAYLOAD_SIZE && photoRefs.length){
+        const { task, photo } = photoRefs.shift();
+        if(task && Array.isArray(task.photos)){
+          const idx = task.photos.indexOf(photo);
+          if(idx !== -1){ task.photos.splice(idx, 1); }
+        }
+        try{ serialized = JSON.stringify(payload); }
+        catch(_){ serialized = ''; }
+      }
+      return payload;
+    }
+
+    function buildSharedPayload(list){
+      const tasks = Array.isArray(list && list.tasks)
+        ? list.tasks.map((task)=> sanitizeSharedTask(task))
+        : [];
+      const payload = {
+        title: list && typeof list.title === 'string' ? list.title : 'Lista',
+        tasks,
+        updatedAt: Date.now()
+      };
+      return trimSharedPayloadToLimit(payload);
+    }
+
+    function normalizeRemoteListData(raw){
+      if(!raw || typeof raw !== 'object'){ return null; }
+      const normalized = {
+        title: typeof raw.title === 'string' ? raw.title : 'Lista',
+        updatedAt: raw.updatedAt ? Number(raw.updatedAt) : Date.now(),
+        tasks: Array.isArray(raw.tasks)
+          ? raw.tasks.map((task)=> sanitizeSharedTask(task))
+          : []
+      };
+      return normalized;
+    }
+
     async function shareListToFirebase(code, list){
       if(!code || !list) throw new Error('Parâmetros inválidos');
       const normalizedCode = String(code).replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
-      const payload = {
-        title: list.title || 'Lista',
-        tasks: Array.isArray(list.tasks)
-          ? list.tasks.map(t=>({ text: t && t.text ? String(t.text) : '', done: !!(t && t.done) }))
-          : [],
-        updatedAt: Date.now()
-      };
+      const payload = buildSharedPayload(list);
       await set(ref(firebaseDb, `sharedLists/${normalizedCode}`), payload);
     }
 
@@ -260,7 +364,7 @@
       const normalizedCode = String(code).replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
       const snapshot = await get(child(ref(firebaseDb), `sharedLists/${normalizedCode}`));
       if(snapshot.exists()){
-        return snapshot.val();
+        return normalizeRemoteListData(snapshot.val());
       }
       return null;
     }
@@ -279,7 +383,8 @@
       const pathRef = ref(firebaseDb, `sharedLists/${normalizedCode}`);
       const listener = (snapshot)=>{
         if(typeof handler === 'function'){
-          handler(snapshot.exists() ? snapshot.val() : null);
+          const payload = snapshot.exists() ? normalizeRemoteListData(snapshot.val()) : null;
+          handler(payload);
         }
       };
       onValue(pathRef, listener);
