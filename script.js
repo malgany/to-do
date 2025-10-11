@@ -329,7 +329,10 @@
             if(currentListId === list.id){
               currentListName.textContent = list.title;
               renderTasks();
-              updateAppBar(screenListDetail.classList.contains('active') ? screenListDetail : screenLists);
+              const activeScreen = [screenTaskDetail, screenListDetail, screenLists]
+                .find((screen)=>screen && screen.classList && screen.classList.contains('active'))
+                || screenLists;
+              updateAppBar(activeScreen);
             }
           });
           liveSubscriptions[listId] = code;
