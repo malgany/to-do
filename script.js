@@ -1,6 +1,6 @@
 (function(){
       // State
-      let lists = []; // {id, title, tasks: [{id,text,done}]}
+      let lists = []; // {id, title, tasks: [{id,text,done,photos:[]}]} 
       let currentListId = null;
       let currentTaskId = null;
       let completedCollapsed = false;
@@ -53,6 +53,7 @@
       const completedCount = el('completedCount');
       const chev = el('chev');
       const rootEl = document.documentElement;
+      const MAX_PHOTOS_PER_TASK = 4;
       const composerOverlayEl = ()=> document.querySelector('.composer-overlay');
       const confirmBackdrop = el('confirmBackdrop');
       const confirmTitle = el('confirmTitle');
@@ -60,6 +61,11 @@
       const confirmCancel = el('confirmCancel');
       const confirmPrimary = el('confirmPrimary');
       const toastContainer = el('toastContainer');
+      const hiddenPhotoInputs = {
+        camera: createHiddenPhotoInput({ capture: 'environment' }),
+        gallery: createHiddenPhotoInput({})
+      };
+      let activePhotoId = null;
 
       // interaction guards
       function preventNativeZoom(){
@@ -222,6 +228,14 @@
       const taskDetailRow = el('taskDetailRow');
       const taskDetailCheckbox = el('taskDetailCheckbox');
       const taskDetailText = el('taskDetailText');
+      const taskPhotoGrid = el('taskPhotoGrid');
+      const photoLightbox = el('photoLightbox');
+      const photoLightboxImage = el('photoLightboxImage');
+      const photoLightboxClose = photoLightbox ? photoLightbox.querySelector('.photo-lightbox-btn.close') : null;
+      const photoLightboxDelete = photoLightbox ? photoLightbox.querySelector('.photo-lightbox-btn.delete') : null;
+      const cameraPhotoButton = document.querySelector('.task-media-footer .photo-action.primary');
+      const galleryPhotoButton = document.querySelector('.task-media-footer .photo-action:not(.primary)');
+      const taskPhotoGridEmpty = taskPhotoGrid ? taskPhotoGrid.querySelector('.photo-grid-empty') : null;
 
       // helpers
       let isMenuOpen = false;
@@ -281,7 +295,11 @@
             if(remoteAt && pushedAt && Math.abs(remoteAt - pushedAt) < 600){ return; }
             const newTitle = remote.title || 'Lista';
             const incoming = Array.isArray(remote.tasks)
-              ? remote.tasks.map((t)=>({ text: t && t.text ? String(t.text) : '', done: !!(t && t.done) }))
+              ? remote.tasks.map((t)=>({
+                text: t && t.text ? String(t.text) : '',
+                done: !!(t && t.done),
+                photos: Array.isArray(t && t.photos) ? t.photos : []
+              }))
               : [];
             // Preservar ordenação local por usuário: ordenar incoming por ranking local quando existir
             const localRank = getLocalOrderForList(list.id);
@@ -303,9 +321,10 @@
             indexedDone.sort(sorter);
             const nowTs = Date.now();
             const rebuilt = [
-              ...indexedActive.map((x, i)=>({ id: 't_'+nowTs+'_'+i, text: x.t.text, done: false })),
-              ...indexedDone.map((x, i)=>({ id: 't_'+nowTs+'_'+'d'+i, text: x.t.text, done: true }))
+              ...indexedActive.map((x, i)=>({ id: 't_'+nowTs+'_'+i, text: x.t.text, done: false, photos: x.t.photos || [] })),
+              ...indexedDone.map((x, i)=>({ id: 't_'+nowTs+'_'+'d'+i, text: x.t.text, done: true, photos: x.t.photos || [] }))
             ];
+            rebuilt.forEach((task)=> ensureTaskStructure(task));
             list.title = newTitle;
             list.tasks = rebuilt;
             updateLocalOrderForList(list.id);
@@ -441,6 +460,264 @@
         });
       }
 
+      function createHiddenPhotoInput(options){
+        try{
+          if(typeof document === 'undefined'){ return null; }
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.accept = 'image/*';
+          input.multiple = true;
+          input.style.display = 'none';
+          input.tabIndex = -1;
+          if(options && options.capture){
+            input.setAttribute('capture', options.capture);
+          }
+          document.body.appendChild(input);
+          input.addEventListener('change', handlePhotoInputChange);
+          return input;
+        }catch(error){
+          console.error('Não foi possível criar input oculto de foto.', error);
+          return null;
+        }
+      }
+
+      function getCurrentTask(){
+        if(!currentListId || !currentTaskId) return null;
+        const list = lists.find((x)=>x && x.id===currentListId);
+        if(!list || !Array.isArray(list.tasks)) return null;
+        return list.tasks.find((t)=>t && t.id===currentTaskId) || null;
+      }
+
+      function updatePhotoActionState(task){
+        const photos = task && Array.isArray(task.photos) ? task.photos : [];
+        const remaining = Math.max(0, MAX_PHOTOS_PER_TASK - photos.length);
+        const disable = remaining <= 0;
+        [cameraPhotoButton, galleryPhotoButton].forEach((btn)=>{
+          if(!btn) return;
+          btn.disabled = disable;
+          btn.setAttribute('aria-disabled', disable ? 'true' : 'false');
+          btn.title = disable ? 'Limite de 4 fotos por tarefa atingido' : '';
+        });
+        if(taskPhotoGrid){
+          taskPhotoGrid.dataset.remaining = String(remaining);
+        }
+        if(taskPhotoGridEmpty){
+          taskPhotoGridEmpty.style.display = photos.length ? 'none' : '';
+        }
+      }
+
+      function renderTaskPhotos(task){
+        if(!taskPhotoGrid) return;
+        const photos = task && Array.isArray(task.photos) ? task.photos : [];
+        taskPhotoGrid.querySelectorAll('.photo-grid-item').forEach((node)=> node.remove());
+        if(!photos.length){
+          if(taskPhotoGridEmpty){ taskPhotoGridEmpty.style.display = ''; }
+          return;
+        }
+        if(taskPhotoGridEmpty){ taskPhotoGridEmpty.style.display = 'none'; }
+        photos.forEach((photo)=>{
+          if(!photo || !photo.dataUrl) return;
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'photo-grid-item';
+          button.dataset.photoId = photo.id;
+          button.setAttribute('aria-label', 'Abrir foto em tela cheia');
+          button.setAttribute('role', 'listitem');
+          const img = document.createElement('img');
+          img.src = photo.dataUrl;
+          img.alt = 'Foto da tarefa';
+          button.appendChild(img);
+          button.addEventListener('click', ()=> openPhotoLightbox(photo.id));
+          taskPhotoGrid.appendChild(button);
+        });
+      }
+
+      function openPhotoPicker(kind){
+        const task = getCurrentTask();
+        if(!task){
+          showToast('Abra uma tarefa para adicionar fotos.', { type: 'error' });
+          return;
+        }
+        ensureTaskStructure(task);
+        if(Array.isArray(task.photos) && task.photos.length >= MAX_PHOTOS_PER_TASK){
+          updatePhotoActionState(task);
+          showToast('Limite de 4 fotos por tarefa atingido.', { type: 'error' });
+          return;
+        }
+        const input = hiddenPhotoInputs ? hiddenPhotoInputs[kind] : null;
+        if(input){
+          try{ input.value=''; }catch(_){ }
+          input.click();
+        } else {
+          showToast('Não foi possível abrir a seleção de fotos.', { type: 'error' });
+        }
+      }
+
+      function openPhotoLightbox(photoId){
+        if(!photoLightbox || !photoLightboxImage){ return; }
+        const task = getCurrentTask();
+        if(!task){ return; }
+        const photo = (task.photos || []).find((p)=>p && p.id===photoId);
+        if(!photo){ return; }
+        activePhotoId = photoId;
+        photoLightboxImage.src = photo.dataUrl;
+        photoLightbox.removeAttribute('hidden');
+        photoLightbox.setAttribute('aria-hidden', 'false');
+        photoLightbox.classList.add('show');
+        if(!isAnotherOverlayActive()){ lockScroll(); }
+      }
+
+      function closePhotoLightbox(options){
+        if(!photoLightbox){ return; }
+        const opts = Object.assign({ skipPersist:false }, options||{});
+        photoLightbox.classList.remove('show');
+        photoLightbox.setAttribute('aria-hidden', 'true');
+        photoLightbox.setAttribute('hidden', 'true');
+        if(photoLightboxImage){ photoLightboxImage.src = ''; }
+        activePhotoId = null;
+        if(!isAnotherOverlayActive()){ unlockScroll(); }
+        const task = getCurrentTask();
+        if(task){
+          updatePhotoActionState(task);
+          if(!opts.skipPersist){
+            ensureTaskStructure(task);
+            saveState();
+            requestSync(currentListId);
+          }
+        }
+      }
+
+      function deleteActivePhoto(){
+        if(!currentListId || !currentTaskId || !activePhotoId) return;
+        const list = lists.find((x)=>x && x.id===currentListId);
+        if(!list || !Array.isArray(list.tasks)) return;
+        const task = list.tasks.find((t)=>t && t.id===currentTaskId);
+        if(!task || !Array.isArray(task.photos)) return;
+        const idx = task.photos.findIndex((p)=>p && p.id===activePhotoId);
+        if(idx===-1) return;
+        task.photos.splice(idx, 1);
+        ensureTaskStructure(task);
+        renderTaskPhotos(task);
+        updatePhotoActionState(task);
+        saveState();
+        requestSync(list.id);
+        showToast('Foto removida.', { type: 'info' });
+        closePhotoLightbox({ skipPersist:true });
+      }
+
+      async function handlePhotoInputChange(event){
+        const input = event && event.target;
+        const files = input && input.files ? Array.from(input.files) : [];
+        if(input){ input.value=''; }
+        if(!files.length){ return; }
+        try{
+          await addPhotosToCurrentTask(files);
+        }catch(error){
+          console.error('Erro ao adicionar fotos à tarefa', error);
+          showToast('Não foi possível adicionar as fotos selecionadas.', { type: 'error' });
+        }
+      }
+
+      async function addPhotosToCurrentTask(files){
+        const task = getCurrentTask();
+        if(!task){
+          showToast('Abra uma tarefa para adicionar fotos.', { type: 'error' });
+          return;
+        }
+        ensureTaskStructure(task);
+        const currentCount = Array.isArray(task.photos) ? task.photos.length : 0;
+        const availableSlots = Math.max(0, MAX_PHOTOS_PER_TASK - currentCount);
+        if(availableSlots <= 0){
+          updatePhotoActionState(task);
+          showToast('Limite de 4 fotos por tarefa atingido.', { type: 'error' });
+          return;
+        }
+        const filesToProcess = files.slice(0, availableSlots);
+        const newPhotos = [];
+        for(const file of filesToProcess){
+          try{
+            const dataUrl = await compressImageFile(file);
+            if(!dataUrl){ throw new Error('compressão inválida'); }
+            newPhotos.push({ id: createPhotoId(), dataUrl, createdAt: Date.now() });
+          }catch(error){
+            console.error('Erro ao comprimir imagem selecionada', error);
+            showToast('Não foi possível adicionar a foto selecionada.', { type: 'error' });
+          }
+        }
+        if(newPhotos.length){
+          task.photos = (task.photos || []).concat(newPhotos).slice(0, MAX_PHOTOS_PER_TASK);
+          ensureTaskStructure(task);
+          renderTaskPhotos(task);
+          saveState();
+          requestSync(currentListId);
+        }
+        updatePhotoActionState(task);
+        if(files.length > filesToProcess.length){
+          showToast('Algumas fotos não foram adicionadas (limite de 4 por tarefa).', { type: 'info' });
+        }
+      }
+
+      async function compressImageFile(file){
+        if(!file){ throw new Error('Arquivo inválido'); }
+        const maxDimension = 1280;
+        const quality = 0.82;
+        let bitmap = null;
+        if(typeof createImageBitmap === 'function'){
+          try{ bitmap = await createImageBitmap(file); }
+          catch(_){ bitmap = null; }
+        }
+        let width = bitmap ? bitmap.width : 0;
+        let height = bitmap ? bitmap.height : 0;
+        let imageElement = null;
+        if(!bitmap){
+          const dataUrl = await new Promise((resolve, reject)=>{
+            const reader = new FileReader();
+            reader.onload = ()=> resolve(reader.result);
+            reader.onerror = ()=> reject(new Error('Erro ao ler arquivo de imagem'));
+            try{ reader.readAsDataURL(file); }
+            catch(e){ reject(e); }
+          });
+          imageElement = await new Promise((resolve, reject)=>{
+            const img = new Image();
+            img.onload = ()=> resolve(img);
+            img.onerror = ()=> reject(new Error('Erro ao carregar imagem'));
+            img.src = dataUrl;
+          });
+          width = imageElement.naturalWidth || imageElement.width;
+          height = imageElement.naturalHeight || imageElement.height;
+        }
+        if(!width || !height){
+          if(bitmap && typeof bitmap.close === 'function'){ bitmap.close(); }
+          throw new Error('Dimensões inválidas para imagem');
+        }
+        const largestSide = Math.max(width, height);
+        const scale = largestSide > maxDimension ? (maxDimension / largestSide) : 1;
+        const targetWidth = Math.max(1, Math.round(width * scale));
+        const targetHeight = Math.max(1, Math.round(height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+        let ctx = null;
+        try{ ctx = canvas.getContext('2d', { alpha: false }); }
+        catch(_){ ctx = null; }
+        if(!ctx){ ctx = canvas.getContext('2d'); }
+        if(!ctx){
+          if(bitmap && typeof bitmap.close === 'function'){ bitmap.close(); }
+          throw new Error('Canvas não suportado');
+        }
+        if(bitmap){
+          ctx.drawImage(bitmap, 0, 0, targetWidth, targetHeight);
+          if(typeof bitmap.close === 'function'){ bitmap.close(); }
+        } else if(imageElement){
+          ctx.drawImage(imageElement, 0, 0, targetWidth, targetHeight);
+        }
+        try{
+          return canvas.toDataURL('image/jpeg', quality);
+        }catch(error){
+          throw new Error('Não foi possível gerar imagem comprimida');
+        }
+      }
+
       // Keyboard avoidance for overlays (modals/composer/share)
       function getKeyboardBottomInset(){
         try{
@@ -563,8 +840,62 @@
         }
       }
 
-      function saveState(){ localStorage.setItem('todo_lists_v3', JSON.stringify(lists)); }
-      function loadState(){ try{ const raw = localStorage.getItem('todo_lists_v3'); if(raw){ lists = JSON.parse(raw); } }catch(e){ lists = []; } }
+      function createPhotoId(){
+        return 'p_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2, 8);
+      }
+
+      function ensureTaskStructure(task){
+        if(!task || typeof task !== 'object'){ return; }
+        if(!task.id){ task.id = 't_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2, 8); }
+        if(typeof task.text !== 'string'){ task.text = ''; }
+        task.done = !!task.done;
+        const normalizedPhotos = [];
+        if(Array.isArray(task.photos)){
+          const ids = new Set();
+          task.photos.forEach((photo)=>{
+            if(!photo || typeof photo.dataUrl !== 'string'){ return; }
+            const dataUrl = String(photo.dataUrl || '');
+            if(!dataUrl){ return; }
+            let id = photo.id ? String(photo.id) : createPhotoId();
+            while(ids.has(id)){ id = createPhotoId(); }
+            const createdAtNum = Number(photo.createdAt);
+            normalizedPhotos.push({
+              id,
+              dataUrl,
+              createdAt: Number.isFinite(createdAtNum) ? createdAtNum : Date.now()
+            });
+            ids.add(id);
+          });
+        }
+        task.photos = normalizedPhotos.slice(0, MAX_PHOTOS_PER_TASK);
+      }
+
+      function ensureListsStructure(){
+        if(!Array.isArray(lists)){ lists = []; return; }
+        lists.forEach((list)=>{
+          if(!list || typeof list !== 'object'){ return; }
+          if(!Array.isArray(list.tasks)){ list.tasks = []; return; }
+          list.tasks.forEach((task)=> ensureTaskStructure(task));
+        });
+      }
+
+      function saveState(){
+        ensureListsStructure();
+        localStorage.setItem('todo_lists_v3', JSON.stringify(lists));
+      }
+
+      function loadState(){
+        try{
+          const raw = localStorage.getItem('todo_lists_v3');
+          if(raw){
+            const parsed = JSON.parse(raw);
+            lists = Array.isArray(parsed) ? parsed : [];
+          }
+        }catch(e){
+          lists = [];
+        }
+        ensureListsStructure();
+      }
 
       // Persistência de ordenação local (por dispositivo/usuário)
       function saveLocalOrderState(){
@@ -1058,6 +1389,10 @@
         if(!list) return;
         const task = list.tasks.find(t=>t.id===taskId);
         if(!task) return;
+        ensureTaskStructure(task);
+        renderTaskPhotos(task);
+        updatePhotoActionState(task);
+        closePhotoLightbox({ skipPersist:true });
         // populate task
         taskDetailText.textContent = task.text || '';
         taskDetailText.setAttribute('data-placeholder','Renomear tarefa');
@@ -1131,6 +1466,15 @@
         
         // Inicializar sortable para as tarefas após renderização
         initSortableTasks();
+
+        if(currentTaskId && screenTaskDetail.classList.contains('active')){
+          const currentTask = list.tasks.find((t)=>t && t.id===currentTaskId);
+          if(currentTask){
+            ensureTaskStructure(currentTask);
+            renderTaskPhotos(currentTask);
+            updatePhotoActionState(currentTask);
+          }
+        }
       }
 
       // animation helper: add pop class then toggle state
@@ -1300,7 +1644,7 @@
         const text = composerInput.value.trim(); if(!text) return;
         const list = lists.find(x=>x.id===currentListId); if(!list) return;
         // add to top of active tasks
-        list.tasks.unshift({id:'t_'+Date.now(), text, done:false});
+        list.tasks.unshift({id:'t_'+Date.now(), text, done:false, photos:[]});
         updateLocalOrderForList(list.id);
         composerInput.value=''; sendTask.disabled=true; saveState(); renderTasks(); renderLists();
         requestSync(list.id);
@@ -1360,6 +1704,25 @@
         taskDetailCheckbox.classList.add('pop');
         setTimeout(()=>{ taskDetailCheckbox.classList.remove('pop'); toggleTaskDone(currentTaskId, newDone); }, 180);
       });
+
+      if(cameraPhotoButton){
+        cameraPhotoButton.addEventListener('click', ()=> openPhotoPicker('camera'));
+      }
+      if(galleryPhotoButton){
+        galleryPhotoButton.addEventListener('click', ()=> openPhotoPicker('gallery'));
+      }
+      if(taskPhotoGridEmpty){
+        taskPhotoGridEmpty.addEventListener('click', ()=> openPhotoPicker('gallery'));
+      }
+      if(photoLightboxClose){
+        photoLightboxClose.addEventListener('click', ()=> closePhotoLightbox());
+      }
+      if(photoLightbox){
+        photoLightbox.addEventListener('click', (evt)=>{ if(evt.target===photoLightbox){ closePhotoLightbox(); } });
+      }
+      if(photoLightboxDelete){
+        photoLightboxDelete.addEventListener('click', ()=> deleteActivePhoto());
+      }
 
       async function deleteCurrentList(){
         if(!currentListId) return;
@@ -1489,7 +1852,15 @@
             }
             const id = 'l_'+Date.now();
             const title = remote.title || 'Lista Importada';
-            const tasks = Array.isArray(remote.tasks) ? remote.tasks.map((t, idx)=>({ id: 't_'+Date.now()+'_'+idx, text: t && t.text ? String(t.text) : '', done: !!(t && t.done) })) : [];
+            const tasks = Array.isArray(remote.tasks)
+              ? remote.tasks.map((t, idx)=>({
+                id: 't_'+Date.now()+'_'+idx,
+                text: t && t.text ? String(t.text) : '',
+                done: !!(t && t.done),
+                photos: Array.isArray(t && t.photos) ? t.photos : []
+              }))
+              : [];
+            tasks.forEach((task)=> ensureTaskStructure(task));
             const newList = { id, title, tasks, shareCode: normalized, imported: true };
             lists.push(newList);
             saveState(); renderLists(); closeCodeModal(); openList(id);
@@ -1503,6 +1874,11 @@
       }
       document.addEventListener('keydown', (evt)=>{
         if(evt.key==='Escape'){
+          if(photoLightbox && photoLightbox.classList.contains('show')){
+            evt.preventDefault();
+            closePhotoLightbox();
+            return;
+          }
           if(confirmBackdrop && confirmBackdrop.classList.contains('show')){
             evt.preventDefault();
             settleConfirm(false);
