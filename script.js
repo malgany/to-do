@@ -1485,12 +1485,15 @@
         else { taskDetailCheckbox.classList.remove('checked'); taskDetailCheckbox.innerHTML=''; }
         showScreen(screenTaskDetail);
         // focus contenteditable when opening
-        setTimeout(()=>{ 
-          taskDetailText.focus(); 
-          if(taskDetailText.textContent && taskDetailText.textContent.length>0){ 
-            placeCaretAtEnd(taskDetailText); 
+        setTimeout(()=>{
+          taskDetailText.focus();
+          if(taskDetailText.textContent && taskDetailText.textContent.length>0){
+            placeCaretAtEnd(taskDetailText);
           }
         },120);
+        if(opts.fromHistory){
+          renderTasks();
+        }
         if(!opts.fromHistory){
           pushHistoryState(SCREEN_KEYS.TASK_DETAIL, { listId: currentListId, taskId });
         }
@@ -1556,6 +1559,14 @@
             ensureTaskStructure(currentTask);
             renderTaskPhotos(currentTask);
             updatePhotoActionState(currentTask);
+            if(document.activeElement !== taskDetailText){
+              const syncedText = currentTask.text || '';
+              const displayedText = taskDetailText.textContent || '';
+              if(displayedText !== syncedText){
+                taskDetailText.textContent = syncedText;
+                lastValidTaskText = syncedText;
+              }
+            }
           }
         }
       }
