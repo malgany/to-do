@@ -67,6 +67,7 @@
       };
       let activePhotoId = null;
       const pendingPhotoIdsByListTask = Object.create(null);
+      const removedPhotoIdsByListTask = Object.create(null);
 
       function getPendingPhotoSet(listId, taskId, createIfMissing){
         if(!listId || !taskId){ return null; }
@@ -94,6 +95,85 @@
           if(set && set.size===0){ delete perList[taskId]; }
         }
         if(Object.keys(perList).length===0){ delete pendingPhotoIdsByListTask[listId]; }
+      }
+
+      function getRemovedPhotoSet(listId, taskId, createIfMissing){
+        if(!listId || !taskId){ return null; }
+        let perList = removedPhotoIdsByListTask[listId];
+        if(!perList){
+          if(!createIfMissing){ return null; }
+          perList = Object.create(null);
+          removedPhotoIdsByListTask[listId] = perList;
+        }
+        let set = perList[taskId];
+        if(!set){
+          if(!createIfMissing){ return null; }
+          set = new Set();
+          perList[taskId] = set;
+        }
+        return set;
+      }
+
+      function cleanupRemovedPhotoEntry(listId, taskId){
+        if(!listId){ return; }
+        const perList = removedPhotoIdsByListTask[listId];
+        if(!perList){ return; }
+        if(taskId){
+          const set = perList[taskId];
+          if(set && set.size===0){ delete perList[taskId]; }
+        }
+        if(Object.keys(perList).length===0){ delete removedPhotoIdsByListTask[listId]; }
+      }
+
+      function markRemovedPhoto(listId, taskId, photoId){
+        if(!listId || !taskId || !photoId){ return; }
+        const set = getRemovedPhotoSet(listId, taskId, true);
+        if(!set){ return; }
+        try{ set.add(String(photoId)); }
+        catch(_){ }
+      }
+
+      function clearRemovedPhotos(listId, taskId, photoIds){
+        if(!listId || !taskId){ return; }
+        const perList = removedPhotoIdsByListTask[listId];
+        if(!perList){ return; }
+        const set = perList[taskId];
+        if(!set){ return; }
+        if(Array.isArray(photoIds) && photoIds.length){
+          photoIds.forEach((id)=>{
+            try{ set.delete(String(id)); }
+            catch(_){ }
+          });
+        } else {
+          try{ set.clear(); }
+          catch(_){ Array.from(set).forEach((value)=> set.delete(value)); }
+        }
+        cleanupRemovedPhotoEntry(listId, taskId);
+      }
+
+      function clearRemovedPhotosForList(listId){
+        if(!listId){ return; }
+        if(removedPhotoIdsByListTask[listId]){
+          delete removedPhotoIdsByListTask[listId];
+        }
+      }
+
+      function reconcileRemovedPhotosForList(list){
+        if(!list || !list.id){ return; }
+        const perList = removedPhotoIdsByListTask[list.id];
+        if(!perList){ return; }
+        const validTaskIds = new Set((Array.isArray(list.tasks) ? list.tasks : [])
+          .map((task)=> task && task.id)
+          .filter(Boolean));
+        Object.keys(perList).forEach((taskId)=>{
+          if(!validTaskIds.has(taskId)){
+            delete perList[taskId];
+            return;
+          }
+          const set = perList[taskId];
+          if(set && set.size===0){ delete perList[taskId]; }
+        });
+        if(Object.keys(perList).length===0){ delete removedPhotoIdsByListTask[list.id]; }
       }
 
       function markPendingPhotos(listId, taskId, photos){
@@ -358,7 +438,10 @@
               published = true;
             }catch(e){ /* ignore sync errors */ }
             finally{
-              if(published){ clearPendingPhotosForList(listId); }
+              if(published){
+                clearPendingPhotosForList(listId);
+                clearRemovedPhotosForList(listId);
+              }
               syncTimers[listId] = null;
             }
           }, wait);
@@ -417,6 +500,7 @@
             list.title = newTitle;
             list.tasks = mergedTasks;
             reconcilePendingPhotosForList(list);
+            reconcileRemovedPhotosForList(list);
             updateLocalOrderForList(list.id);
             saveState();
             renderLists();
@@ -690,6 +774,7 @@
         if(idx===-1) return;
         task.photos.splice(idx, 1);
         clearPendingPhotos(list.id, task.id, [activePhotoId]);
+        markRemovedPhoto(list.id, task.id, activePhotoId);
         ensureTaskStructure(task);
         renderTaskPhotos(task);
         updatePhotoActionState(task);
@@ -984,7 +1069,13 @@
         const pendingSet = (listId && taskId)
           ? getPendingPhotoSet(listId, taskId, false)
           : null;
-        remoteList.forEach((photo)=>{
+        const removedSet = (listId && taskId)
+          ? getRemovedPhotoSet(listId, taskId, false)
+          : null;
+        const filteredRemote = removedSet
+          ? remoteList.filter((photo)=> photo && !removedSet.has(photo.id))
+          : remoteList;
+        filteredRemote.forEach((photo)=>{
           if(photo && !seen.has(photo.id)){
             combined.push(photo);
             seen.add(photo.id);
@@ -1009,6 +1100,10 @@
             if(toRemove.length){ toRemove.forEach((id)=> pendingSet.delete(id)); }
           }
           cleanupPendingPhotoEntry(listId, taskId);
+          if(removedSet && filteredRemote.length){
+            filteredRemote.forEach((photo)=>{ try{ removedSet.delete(photo.id); }catch(_){ } });
+            cleanupRemovedPhotoEntry(listId, taskId);
+          }
         } else {
           localList.forEach((photo)=>{
             if(photo && !seen.has(photo.id)){
@@ -1017,6 +1112,7 @@
             }
           });
         }
+        if(removedSet && !filteredRemote.length){ cleanupRemovedPhotoEntry(listId, taskId); }
         return combined.slice(0, MAX_PHOTOS_PER_TASK);
       }
 
@@ -1953,6 +2049,7 @@
         const list = lists[idx];
         removeCompletedCollapseState(list && list.id);
         clearPendingPhotosForList(list && list.id);
+        clearRemovedPhotosForList(list && list.id);
         // tentativa de exclusão remota (best-effort)
         try{
           if(list && list.shareCode && !list.imported && typeof window !== 'undefined' && typeof window.firebaseDeleteList === 'function'){
