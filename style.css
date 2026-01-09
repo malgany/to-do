@@ -505,6 +505,48 @@ button.btn:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
   z-index: 999;
 }
 
+/* Lixeira flutuante para exclusão */
+.trash-zone {
+  position: fixed;
+  left: calc(var(--gutter) + env(safe-area-inset-left, 0px));
+  bottom: calc(var(--gutter) + env(safe-area-inset-bottom));
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--muted);
+  color: #fff;
+  box-shadow: var(--shadow-md);
+  opacity: 0;
+  transform: scale(0.8);
+  transition: all var(--transition-fast);
+  pointer-events: none;
+  z-index: 25;
+}
+
+.trash-zone[hidden] {
+  display: none;
+}
+
+.trash-zone.visible {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
+.trash-zone.drag-over {
+  background: #DC2626;
+  transform: scale(1.15);
+  box-shadow: 0 16px 38px rgba(220, 38, 38, 0.45);
+}
+
+.trash-zone svg {
+  width: 28px;
+  height: 28px;
+}
+
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{transition-duration:0.001ms !important;animation-duration:0.001ms !important}
 }

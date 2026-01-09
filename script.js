@@ -2277,6 +2277,35 @@
       let activeSortable = null;
       let completedSortable = null;
       
+      // Função auxiliar para calcular se cursor está sobre a lixeira
+      function isOverTrashZone(evt) {
+        const trashZone = el('trashZone');
+        if (!trashZone || trashZone.hasAttribute('hidden')) return false;
+        
+        const rect = trashZone.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        
+        // Obter posição do cursor (touch ou mouse)
+        let clientX, clientY;
+        if (evt.originalEvent && evt.originalEvent.touches && evt.originalEvent.touches.length > 0) {
+          clientX = evt.originalEvent.touches[0].clientX;
+          clientY = evt.originalEvent.touches[0].clientY;
+        } else if (evt.originalEvent) {
+          clientX = evt.originalEvent.clientX;
+          clientY = evt.originalEvent.clientY;
+        } else {
+          clientX = evt.clientX || 0;
+          clientY = evt.clientY || 0;
+        }
+        
+        // Calcular distância do centro da lixeira
+        const distance = Math.sqrt(Math.pow(clientX - centerX, 2) + Math.pow(clientY - centerY, 2));
+        
+        // Considera "sobre" se estiver dentro de 80px do centro
+        return distance < 80;
+      }
+      
       // Função para inicializar a ordenação das tarefas
       async function initSortableTasks() {
         try {
@@ -2284,41 +2313,101 @@
           const list = lists.find(x=>x.id===currentListId);
           if (!list) return;
           
+          const trashZone = el('trashZone');
+          
           // Destruir instâncias anteriores se existirem
           try{ if (activeSortable && activeSortable.el) { activeSortable.destroy(); } }catch(_){ }
           try{ if (completedSortable && completedSortable.el) { completedSortable.destroy(); } }catch(_){ }
           activeSortable = null;
           completedSortable = null;
           
+          // Configuração comum para ambos sortables
+          const commonConfig = {
+            animation: 150,
+            delay: 180,
+            delayOnTouchOnly: true,
+            touchStartThreshold: 3,
+            filter: '.checkbox-round',
+            ghostClass: 'sortable-ghost',
+            chosenClass: 'sortable-chosen',
+            dragClass: 'sortable-drag',
+            onStart: function(evt) {
+              // Mostrar lixeira quando começar a arrastar
+              if (trashZone) {
+                trashZone.removeAttribute('hidden');
+                requestAnimationFrame(() => {
+                  trashZone.classList.add('visible');
+                });
+              }
+            },
+            onMove: function(evt) {
+              // Verificar se está sobre a lixeira e atualizar visual
+              if (trashZone) {
+                if (isOverTrashZone(evt)) {
+                  trashZone.classList.add('drag-over');
+                } else {
+                  trashZone.classList.remove('drag-over');
+                }
+              }
+              return true; // permite o movimento
+            },
+            onUnchoose: function(evt) {
+              // Esconder lixeira se cancelar o drag
+              if (trashZone) {
+                trashZone.classList.remove('visible', 'drag-over');
+                setTimeout(() => {
+                  if (!trashZone.classList.contains('visible')) {
+                    trashZone.setAttribute('hidden', '');
+                  }
+                }, 160);
+              }
+            }
+          };
+          
           // Inicializar ordenação para tarefas ativas
           if (tasksContainer && tasksContainer.children.length > 1) {
             activeSortable = new Sortable(tasksContainer, {
-              animation: 150,
-              delay: 180,
-              delayOnTouchOnly: true,
-              touchStartThreshold: 3,
-              filter: '.checkbox-round',
-              ghostClass: 'sortable-ghost',
-              chosenClass: 'sortable-chosen',
-              dragClass: 'sortable-drag',
+              ...commonConfig,
               onEnd: function(evt) {
-                // Reorganizar tarefas ativas
-                const taskElements = Array.from(tasksContainer.querySelectorAll('.task'));
-                const activeTasks = [];
-                const doneTasks = list.tasks.filter(t => t.done);
+                // Verificar se foi solto na lixeira
+                const overTrash = trashZone && isOverTrashZone(evt);
                 
-                taskElements.forEach(el => {
-                  const id = el.dataset.id;
-                  const task = list.tasks.find(t => t.id === id);
-                  if (task) {
-                    activeTasks.push(task);
+                // Esconder lixeira
+                if (trashZone) {
+                  trashZone.classList.remove('visible', 'drag-over');
+                  setTimeout(() => {
+                    if (!trashZone.classList.contains('visible')) {
+                      trashZone.setAttribute('hidden', '');
+                    }
+                  }, 160);
+                }
+                
+                if (overTrash) {
+                  // Excluir tarefa
+                  const taskEl = evt.item;
+                  const taskId = taskEl ? taskEl.dataset.id : null;
+                  if (taskId) {
+                    deleteTask(taskId);
                   }
-                });
-                
-                list.tasks = [...activeTasks, ...doneTasks];
-                updateLocalOrderForList(list.id);
-                saveState();
-                requestSync(list.id);
+                } else {
+                  // Reorganizar tarefas ativas
+                  const taskElements = Array.from(tasksContainer.querySelectorAll('.task'));
+                  const activeTasks = [];
+                  const doneTasks = list.tasks.filter(t => t.done);
+                  
+                  taskElements.forEach(el => {
+                    const id = el.dataset.id;
+                    const task = list.tasks.find(t => t.id === id);
+                    if (task) {
+                      activeTasks.push(task);
+                    }
+                  });
+                  
+                  list.tasks = [...activeTasks, ...doneTasks];
+                  updateLocalOrderForList(list.id);
+                  saveState();
+                  requestSync(list.id);
+                }
               }
             });
           }
@@ -2326,32 +2415,47 @@
           // Inicializar ordenação para tarefas concluídas
           if (completedList && completedList.children.length > 0) {
             completedSortable = new Sortable(completedList, {
-              animation: 150,
-              delay: 180,
-              delayOnTouchOnly: true,
-              touchStartThreshold: 3,
-              filter: '.checkbox-round',
-              ghostClass: 'sortable-ghost',
-              chosenClass: 'sortable-chosen',
-              dragClass: 'sortable-drag',
+              ...commonConfig,
               onEnd: function(evt) {
-                // Reorganizar tarefas concluídas
-                const taskElements = Array.from(completedList.querySelectorAll('.task'));
-                const activeTasks = list.tasks.filter(t => !t.done);
-                const doneTasks = [];
+                // Verificar se foi solto na lixeira
+                const overTrash = trashZone && isOverTrashZone(evt);
                 
-                taskElements.forEach(el => {
-                  const id = el.dataset.id;
-                  const task = list.tasks.find(t => t.id === id);
-                  if (task) {
-                    doneTasks.push(task);
+                // Esconder lixeira
+                if (trashZone) {
+                  trashZone.classList.remove('visible', 'drag-over');
+                  setTimeout(() => {
+                    if (!trashZone.classList.contains('visible')) {
+                      trashZone.setAttribute('hidden', '');
+                    }
+                  }, 160);
+                }
+                
+                if (overTrash) {
+                  // Excluir tarefa
+                  const taskEl = evt.item;
+                  const taskId = taskEl ? taskEl.dataset.id : null;
+                  if (taskId) {
+                    deleteTask(taskId);
                   }
-                });
-                
-                list.tasks = [...activeTasks, ...doneTasks];
-                updateLocalOrderForList(list.id);
-                saveState();
-                requestSync(list.id);
+                } else {
+                  // Reorganizar tarefas concluídas
+                  const taskElements = Array.from(completedList.querySelectorAll('.task'));
+                  const activeTasks = list.tasks.filter(t => !t.done);
+                  const doneTasks = [];
+                  
+                  taskElements.forEach(el => {
+                    const id = el.dataset.id;
+                    const task = list.tasks.find(t => t.id === id);
+                    if (task) {
+                      doneTasks.push(task);
+                    }
+                  });
+                  
+                  list.tasks = [...activeTasks, ...doneTasks];
+                  updateLocalOrderForList(list.id);
+                  saveState();
+                  requestSync(list.id);
+                }
               }
             });
           }
