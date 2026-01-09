@@ -103,7 +103,7 @@
       }
 
       // Criar novo grupo ou adicionar a existente
-      function createOrAddToGroup(listId, draggedTaskId, targetTaskId) {
+      function createOrAddToGroup(listId, draggedTaskId, targetTaskId, fromHover = false) {
         if (!listId || !draggedTaskId || !targetTaskId) return;
         if (draggedTaskId === targetTaskId) return;
         
@@ -148,7 +148,10 @@
         saveLocalGroups(listId, groups);
         
         // Re-renderizar as tarefas para mostrar o agrupamento
-        renderTasks();
+        // IMPORTANTE: Não renderizar durante hover para evitar destruir Sortable ativo
+        if (!fromHover) {
+          renderTasks();
+        }
       }
 
       // Remover tarefa de grupo (ao arrastar para fora)
@@ -2568,6 +2571,7 @@
       let hoverTimer = null;
       let hoverTarget = null;
       let draggedTaskId = null;
+      let hoverGroupingInProgress = false;
       
       // Função auxiliar para calcular se cursor está sobre a lixeira
       function isOverTrashZone(evt) {
@@ -2690,7 +2694,8 @@
                   hoverTimer = setTimeout(() => {
                     // Criar ou adicionar ao grupo
                     if (draggedTaskId && overTaskId && draggedTaskId !== overTaskId) {
-                      createOrAddToGroup(currentListId, draggedTaskId, overTaskId);
+                      hoverGroupingInProgress = true;
+                      createOrAddToGroup(currentListId, draggedTaskId, overTaskId, true);
                       
                       // Limpar feedback visual
                       if (hoverTarget) {
@@ -2756,6 +2761,26 @@
                 if (hoverTarget) {
                   hoverTarget.classList.remove('hover-grouping');
                   hoverTarget = null;
+                }
+                
+                // CORREÇÃO: Se agrupamento via hover acabou de ocorrer, apenas renderizar e sair
+                if (hoverGroupingInProgress) {
+                  hoverGroupingInProgress = false;
+                  draggedTaskId = null;
+                  
+                  // Esconder lixeira
+                  if (trashZone) {
+                    trashZone.classList.remove('visible', 'drag-over');
+                    setTimeout(() => {
+                      if (!trashZone.classList.contains('visible')) {
+                        trashZone.setAttribute('hidden', '');
+                      }
+                    }, 160);
+                  }
+                  
+                  // Renderizar para mostrar o agrupamento
+                  renderTasks();
+                  return;
                 }
                 
                 // Verificar se foi solto na lixeira
@@ -2829,6 +2854,26 @@
                 if (hoverTarget) {
                   hoverTarget.classList.remove('hover-grouping');
                   hoverTarget = null;
+                }
+                
+                // CORREÇÃO: Se agrupamento via hover acabou de ocorrer, apenas renderizar e sair
+                if (hoverGroupingInProgress) {
+                  hoverGroupingInProgress = false;
+                  draggedTaskId = null;
+                  
+                  // Esconder lixeira
+                  if (trashZone) {
+                    trashZone.classList.remove('visible', 'drag-over');
+                    setTimeout(() => {
+                      if (!trashZone.classList.contains('visible')) {
+                        trashZone.setAttribute('hidden', '');
+                      }
+                    }, 160);
+                  }
+                  
+                  // Renderizar para mostrar o agrupamento
+                  renderTasks();
+                  return;
                 }
                 
                 // Verificar se foi solto na lixeira
@@ -2906,6 +2951,26 @@
                   if (hoverTarget) {
                     hoverTarget.classList.remove('hover-grouping');
                     hoverTarget = null;
+                  }
+                  
+                  // CORREÇÃO: Se agrupamento via hover acabou de ocorrer, apenas renderizar e sair
+                  if (hoverGroupingInProgress) {
+                    hoverGroupingInProgress = false;
+                    draggedTaskId = null;
+                    
+                    // Esconder lixeira
+                    if (trashZone) {
+                      trashZone.classList.remove('visible', 'drag-over');
+                      setTimeout(() => {
+                        if (!trashZone.classList.contains('visible')) {
+                          trashZone.setAttribute('hidden', '');
+                        }
+                      }, 160);
+                    }
+                    
+                    // Renderizar para mostrar o agrupamento
+                    renderTasks();
+                    return;
                   }
                   
                   // Verificar se foi solto na lixeira
