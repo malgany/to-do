@@ -547,6 +547,55 @@ button.btn:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
   height: 28px;
 }
 
+/* Task Groups - Local visual grouping */
+.task-group {
+  border: 2px solid var(--group-color);
+  border-radius: var(--radius-md);
+  background: var(--group-bg);
+  padding: var(--space-2);
+  margin-bottom: var(--space-3);
+  position: relative;
+}
+
+.task-group .task {
+  margin-bottom: var(--space-2);
+}
+
+.task-group .task:last-child {
+  margin-bottom: 0;
+}
+
+/* Feedback visual durante hover para agrupamento */
+.hover-grouping {
+  border-color: var(--brand) !important;
+  animation: pulse-border 1.2s ease-in-out;
+  box-shadow: 0 0 0 4px var(--brand-50);
+}
+
+@keyframes pulse-border {
+  0%, 100% { 
+    border-width: 1px; 
+    opacity: 1; 
+    transform: scale(1);
+  }
+  50% { 
+    border-width: 3px; 
+    opacity: 0.8;
+    transform: scale(1.02);
+  }
+}
+
+/* Garantir que o drag funcione dentro de grupos */
+.task-group .sortable-ghost {
+  opacity: 0.5;
+  background: var(--brand-50) !important;
+}
+
+.task-group .sortable-chosen {
+  background: var(--brand-50) !important;
+}
+
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{transition-duration:0.001ms !important;animation-duration:0.001ms !important}
+  .hover-grouping{animation:none}
 }

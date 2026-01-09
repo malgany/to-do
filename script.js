@@ -12,6 +12,182 @@
       const el = id=>document.getElementById(id);
       const SVG_NS = 'http://www.w3.org/2000/svg';
 
+      // ===== TASK GROUPS - Local Storage Only (Not Synced) =====
+      const TASK_GROUPS_STORAGE_KEY = 'todo_task_groups_v1';
+      
+      // Paleta de cores para grupos (sequencial)
+      const GROUP_COLORS = [
+        { name: 'blue', color: '#3B82F6', bg: 'rgba(59,130,246,0.12)' },
+        { name: 'yellow', color: '#F59E0B', bg: 'rgba(245,158,11,0.12)' },
+        { name: 'green', color: '#10B981', bg: 'rgba(16,185,129,0.12)' },
+        { name: 'pink', color: '#EC4899', bg: 'rgba(236,72,153,0.12)' },
+        { name: 'purple', color: '#8B5CF6', bg: 'rgba(139,92,246,0.12)' },
+        { name: 'orange', color: '#F97316', bg: 'rgba(249,115,22,0.12)' }
+      ];
+
+      // Carregar todos os grupos do localStorage
+      function loadAllGroups() {
+        try {
+          const stored = localStorage.getItem(TASK_GROUPS_STORAGE_KEY);
+          return stored ? JSON.parse(stored) : {};
+        } catch (e) {
+          console.error('Erro ao carregar grupos:', e);
+          return {};
+        }
+      }
+
+      // Salvar todos os grupos no localStorage
+      function saveAllGroups(allGroups) {
+        try {
+          localStorage.setItem(TASK_GROUPS_STORAGE_KEY, JSON.stringify(allGroups));
+        } catch (e) {
+          console.error('Erro ao salvar grupos:', e);
+        }
+      }
+
+      // Carregar grupos de uma lista específica
+      function loadLocalGroups(listId) {
+        if (!listId) return {};
+        const allGroups = loadAllGroups();
+        return allGroups[listId] || {};
+      }
+
+      // Salvar grupos de uma lista específica
+      function saveLocalGroups(listId, groups) {
+        if (!listId) return;
+        const allGroups = loadAllGroups();
+        allGroups[listId] = groups;
+        saveAllGroups(allGroups);
+      }
+
+      // Obter próxima cor disponível na sequência
+      function getNextGroupColor(listId) {
+        const groups = loadLocalGroups(listId);
+        const usedColors = new Set();
+        Object.values(groups).forEach(group => {
+          if (group.color) usedColors.add(group.color);
+        });
+        
+        // Encontrar primeira cor não usada
+        for (const colorObj of GROUP_COLORS) {
+          if (!usedColors.has(colorObj.name)) {
+            return colorObj;
+          }
+        }
+        
+        // Se todas estão usadas, retornar a primeira (ciclar)
+        return GROUP_COLORS[0];
+      }
+
+      // Obter grupo que contém uma tarefa
+      function getTaskGroup(listId, taskId) {
+        if (!listId || !taskId) return null;
+        const groups = loadLocalGroups(listId);
+        for (const [groupId, group] of Object.entries(groups)) {
+          if (group.taskIds && group.taskIds.includes(taskId)) {
+            return { groupId, ...group };
+          }
+        }
+        return null;
+      }
+
+      // Criar ID único para grupo
+      function createGroupId() {
+        return 'grp_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+      }
+
+      // Criar novo grupo ou adicionar a existente
+      function createOrAddToGroup(listId, draggedTaskId, targetTaskId) {
+        if (!listId || !draggedTaskId || !targetTaskId) return;
+        if (draggedTaskId === targetTaskId) return;
+        
+        const groups = loadLocalGroups(listId);
+        
+        // Verificar se o target já está em um grupo
+        const targetGroup = getTaskGroup(listId, targetTaskId);
+        
+        if (targetGroup) {
+          // Adicionar ao grupo existente se ainda não estiver nele
+          if (!targetGroup.taskIds.includes(draggedTaskId)) {
+            groups[targetGroup.groupId].taskIds.push(draggedTaskId);
+          }
+        } else {
+          // Criar novo grupo
+          const newGroupId = createGroupId();
+          const colorObj = getNextGroupColor(listId);
+          groups[newGroupId] = {
+            taskIds: [targetTaskId, draggedTaskId],
+            color: colorObj.name,
+            createdAt: Date.now()
+          };
+        }
+        
+        // Limpar grupos vazios
+        deleteEmptyGroups(listId, groups);
+        saveLocalGroups(listId, groups);
+        
+        // Re-renderizar as tarefas para mostrar o agrupamento
+        renderTasks();
+      }
+
+      // Remover tarefa de grupo (ao arrastar para fora)
+      function removeFromGroup(listId, taskId) {
+        if (!listId || !taskId) return;
+        const groups = loadLocalGroups(listId);
+        let changed = false;
+        
+        for (const groupId in groups) {
+          const index = groups[groupId].taskIds.indexOf(taskId);
+          if (index !== -1) {
+            groups[groupId].taskIds.splice(index, 1);
+            changed = true;
+          }
+        }
+        
+        if (changed) {
+          deleteEmptyGroups(listId, groups);
+          saveLocalGroups(listId, groups);
+        }
+      }
+
+      // Limpar grupos com menos de 2 tarefas
+      function deleteEmptyGroups(listId, groups) {
+        if (!groups) groups = loadLocalGroups(listId);
+        for (const groupId in groups) {
+          if (!groups[groupId].taskIds || groups[groupId].taskIds.length < 2) {
+            delete groups[groupId];
+          }
+        }
+      }
+
+      // Limpar grupos ao excluir uma tarefa
+      function cleanupGroupsForTask(listId, taskId) {
+        if (!listId || !taskId) return;
+        const groups = loadLocalGroups(listId);
+        for (const groupId in groups) {
+          const index = groups[groupId].taskIds.indexOf(taskId);
+          if (index !== -1) {
+            groups[groupId].taskIds.splice(index, 1);
+          }
+        }
+        deleteEmptyGroups(listId, groups);
+        saveLocalGroups(listId, groups);
+      }
+
+      // Limpar TODOS os grupos de uma lista ao excluí-la
+      function cleanupGroupsForList(listId) {
+        if (!listId) return;
+        const allGroups = loadAllGroups();
+        delete allGroups[listId];
+        saveAllGroups(allGroups);
+      }
+
+      // Obter objeto de cor pelo nome
+      function getColorObject(colorName) {
+        return GROUP_COLORS.find(c => c.name === colorName) || GROUP_COLORS[0];
+      }
+      // ===== FIM TASK GROUPS =====
+
       // Elements
       const screenLists = el('screenLists');
       const screenListDetail = el('screenListDetail');
@@ -1727,6 +1903,102 @@
         const range = document.createRange(); const sel = window.getSelection(); range.selectNodeContents(el); range.collapse(false); sel.removeAllRanges(); sel.addRange(range);
       }
 
+      // Renderizar tarefas com suporte a agrupamento visual
+      function renderTasksWithGroups(tasks, container, groups, isDone) {
+        // Criar mapa de taskId -> groupId
+        const taskToGroup = {};
+        for (const [groupId, group] of Object.entries(groups)) {
+          if (group.taskIds) {
+            group.taskIds.forEach(taskId => {
+              taskToGroup[taskId] = groupId;
+            });
+          }
+        }
+
+        // Agrupar tarefas
+        const groupedTasks = {}; // groupId -> [tasks]
+        const ungroupedTasks = [];
+
+        tasks.forEach(task => {
+          const groupId = taskToGroup[task.id];
+          if (groupId) {
+            if (!groupedTasks[groupId]) {
+              groupedTasks[groupId] = [];
+            }
+            groupedTasks[groupId].push(task);
+          } else {
+            ungroupedTasks.push(task);
+          }
+        });
+
+        // Função auxiliar para criar um elemento de tarefa
+        function createTaskElement(t, isDone) {
+          const node = document.createElement('div');
+          node.className = isDone ? 'task done' : 'task';
+          node.dataset.id = t.id;
+
+          const cb = document.createElement('button');
+          if (isDone) {
+            cb.className = 'checkbox-round checked';
+            cb.setAttribute('aria-pressed', 'true');
+            cb.title = 'Desmarcar';
+            cb.innerHTML = '✓';
+            cb.addEventListener('click', (ev) => { ev.stopPropagation(); animateAndToggle(cb, t.id, false); });
+          } else {
+            cb.className = 'checkbox-round';
+            cb.setAttribute('aria-pressed', 'false');
+            cb.title = 'Marcar como concluída';
+            cb.addEventListener('click', (ev) => { ev.stopPropagation(); animateAndToggle(cb, t.id, true); });
+          }
+
+          const txt = document.createElement('div');
+          txt.className = 'text';
+          txt.textContent = t.text;
+          txt.addEventListener('click', (ev) => { ev.stopPropagation(); openTaskDetail(t.id); });
+
+          node.appendChild(cb);
+          node.appendChild(txt);
+          return node;
+        }
+
+        // Renderizar na ordem: grupos primeiro, depois tarefas sem grupo
+        // Manter ordem original das tarefas
+        const processedTasks = new Set();
+
+        tasks.forEach(task => {
+          if (processedTasks.has(task.id)) return;
+
+          const groupId = taskToGroup[task.id];
+          if (groupId && groupedTasks[groupId]) {
+            // Renderizar grupo
+            const groupTasks = groupedTasks[groupId];
+            const group = groups[groupId];
+            const colorObj = getColorObject(group.color);
+
+            const groupContainer = document.createElement('div');
+            groupContainer.className = 'task-group';
+            groupContainer.dataset.groupId = groupId;
+            groupContainer.style.setProperty('--group-color', colorObj.color);
+            groupContainer.style.setProperty('--group-bg', colorObj.bg);
+
+            // Adicionar tarefas do grupo na ordem original
+            groupTasks.forEach(groupTask => {
+              const taskEl = createTaskElement(groupTask, isDone);
+              groupContainer.appendChild(taskEl);
+              processedTasks.add(groupTask.id);
+            });
+
+            container.appendChild(groupContainer);
+            delete groupedTasks[groupId]; // Evitar renderizar o mesmo grupo duas vezes
+          } else if (!groupId) {
+            // Renderizar tarefa sem grupo
+            const taskEl = createTaskElement(task, isDone);
+            container.appendChild(taskEl);
+            processedTasks.add(task.id);
+          }
+        });
+      }
+
       function renderTasks(){
         tasksContainer.innerHTML=''; completedList.innerHTML='';
         const list = lists.find(x=>x.id===currentListId);
@@ -1735,20 +2007,13 @@
         const active = list.tasks.filter(t=>!t.done);
         const done = list.tasks.filter(t=>t.done);
 
+        // Carregar grupos locais da lista
+        const groups = loadLocalGroups(currentListId);
+
         if(active.length===0){ const elEmpty = document.createElement('div'); elEmpty.className='centered-empty'; elEmpty.textContent='Nenhuma tarefa ativa.'; tasksContainer.appendChild(elEmpty); }
         else{
-          active.forEach(t=>{
-            const node = document.createElement('div'); node.className='task'; node.dataset.id=t.id;
-            const cb = document.createElement('button'); cb.className='checkbox-round'; cb.setAttribute('aria-pressed','false'); cb.title='Marcar como concluída';
-            cb.addEventListener('click', (ev)=>{ ev.stopPropagation(); animateAndToggle(cb, t.id, true); });
-            const txt = document.createElement('div'); txt.className='text'; txt.textContent=t.text;
-            // clicking the text opens detail
-            txt.addEventListener('click', (ev)=>{ ev.stopPropagation(); openTaskDetail(t.id); });
-
-            node.appendChild(cb); 
-            node.appendChild(txt);
-            tasksContainer.appendChild(node);
-          });
+          // Renderizar tarefas ativas com agrupamento visual
+          renderTasksWithGroups(active, tasksContainer, groups, false);
         }
 
         if(done.length>0){
@@ -1759,16 +2024,8 @@
           if(completedCollapsed){ completedList.style.display='none'; }
           else{ completedList.style.display='flex'; }
 
-          done.forEach(t=>{
-            const node = document.createElement('div'); node.className='task done'; node.dataset.id=t.id;
-            const cb = document.createElement('button'); cb.className='checkbox-round checked'; cb.setAttribute('aria-pressed','true'); cb.title='Desmarcar'; cb.innerHTML='✓'; cb.addEventListener('click', (ev)=>{ ev.stopPropagation(); animateAndToggle(cb, t.id, false); });
-            const txt = document.createElement('div'); txt.className='text'; txt.textContent=t.text;
-            txt.addEventListener('click', (ev)=>{ ev.stopPropagation(); openTaskDetail(t.id); });
-
-            node.appendChild(cb); 
-            node.appendChild(txt);
-            completedList.appendChild(node);
-          });
+          // Renderizar tarefas concluídas com agrupamento visual
+          renderTasksWithGroups(done, completedList, groups, true);
         } else {
           completedGroup.style.display='none';
         }
@@ -1840,6 +2097,10 @@
         const list = lists.find(x=>x.id===currentListId); if(!list) return;
         const idx = list.tasks.findIndex(t=>t.id===taskId); if(idx===-1) return;
         clearPendingPhotos(list.id, taskId);
+        
+        // Limpar grupos ao excluir tarefa
+        cleanupGroupsForTask(list.id, taskId);
+        
         list.tasks.splice(idx,1);
         updateLocalOrderForList(list.id);
         saveState(); renderTasks(); renderLists(); requestSync(list.id);
@@ -2050,6 +2311,10 @@
         removeCompletedCollapseState(list && list.id);
         clearPendingPhotosForList(list && list.id);
         clearRemovedPhotosForList(list && list.id);
+        
+        // Limpar TODOS os grupos da lista ao excluí-la
+        cleanupGroupsForList(list.id);
+        
         // tentativa de exclusão remota (best-effort)
         try{
           if(list && list.shareCode && !list.imported && typeof window !== 'undefined' && typeof window.firebaseDeleteList === 'function'){
@@ -2276,6 +2541,12 @@
       // Variáveis para guardar as instâncias de Sortable
       let activeSortable = null;
       let completedSortable = null;
+      let groupSortables = []; // Array para guardar instâncias de sortable dos grupos
+      
+      // Variáveis para controlar hover prolongado para agrupamento
+      let hoverTimer = null;
+      let hoverTarget = null;
+      let draggedTaskId = null;
       
       // Função auxiliar para calcular se cursor está sobre a lixeira
       function isOverTrashZone(evt) {
@@ -2318,8 +2589,10 @@
           // Destruir instâncias anteriores se existirem
           try{ if (activeSortable && activeSortable.el) { activeSortable.destroy(); } }catch(_){ }
           try{ if (completedSortable && completedSortable.el) { completedSortable.destroy(); } }catch(_){ }
+          groupSortables.forEach(s => { try{ if(s && s.el) s.destroy(); }catch(_){} });
           activeSortable = null;
           completedSortable = null;
+          groupSortables = [];
           
           // Configuração comum para ambos sortables
           const commonConfig = {
@@ -2332,6 +2605,19 @@
             chosenClass: 'sortable-chosen',
             dragClass: 'sortable-drag',
             onStart: function(evt) {
+              // Guardar ID da tarefa sendo arrastada
+              draggedTaskId = evt.item ? evt.item.dataset.id : null;
+              
+              // Limpar timer de hover se existir
+              if (hoverTimer) {
+                clearTimeout(hoverTimer);
+                hoverTimer = null;
+              }
+              if (hoverTarget) {
+                hoverTarget.classList.remove('hover-grouping');
+                hoverTarget = null;
+              }
+              
               // Mostrar lixeira quando começar a arrastar
               if (trashZone) {
                 trashZone.removeAttribute('hidden');
@@ -2345,13 +2631,83 @@
               if (trashZone) {
                 if (isOverTrashZone(evt)) {
                   trashZone.classList.add('drag-over');
+                  // Cancelar hover de agrupamento se estiver sobre lixeira
+                  if (hoverTimer) {
+                    clearTimeout(hoverTimer);
+                    hoverTimer = null;
+                  }
+                  if (hoverTarget) {
+                    hoverTarget.classList.remove('hover-grouping');
+                    hoverTarget = null;
+                  }
                 } else {
                   trashZone.classList.remove('drag-over');
                 }
               }
+              
+              // Lógica de hover prolongado para agrupamento
+              const overTask = evt.related;
+              
+              // Verificar se está sobre uma tarefa (não sobre grupo ou container)
+              if (overTask && overTask.classList.contains('task') && overTask.dataset.id && !isOverTrashZone(evt)) {
+                const overTaskId = overTask.dataset.id;
+                
+                // Se for uma tarefa diferente do target anterior
+                if (hoverTarget !== overTask) {
+                  // Limpar timer anterior
+                  if (hoverTimer) {
+                    clearTimeout(hoverTimer);
+                  }
+                  if (hoverTarget) {
+                    hoverTarget.classList.remove('hover-grouping');
+                  }
+                  
+                  // Iniciar novo timer
+                  hoverTarget = overTask;
+                  hoverTarget.classList.add('hover-grouping');
+                  
+                  hoverTimer = setTimeout(() => {
+                    // Criar ou adicionar ao grupo
+                    if (draggedTaskId && overTaskId && draggedTaskId !== overTaskId) {
+                      createOrAddToGroup(currentListId, draggedTaskId, overTaskId);
+                      
+                      // Limpar feedback visual
+                      if (hoverTarget) {
+                        hoverTarget.classList.remove('hover-grouping');
+                        hoverTarget = null;
+                      }
+                    }
+                    hoverTimer = null;
+                  }, 1200);
+                }
+              } else {
+                // Não está sobre uma tarefa, limpar timer
+                if (hoverTimer) {
+                  clearTimeout(hoverTimer);
+                  hoverTimer = null;
+                }
+                if (hoverTarget) {
+                  hoverTarget.classList.remove('hover-grouping');
+                  hoverTarget = null;
+                }
+              }
+              
               return true; // permite o movimento
             },
             onUnchoose: function(evt) {
+              // Cancelar operação de agrupamento em andamento
+              if (hoverTimer) {
+                clearTimeout(hoverTimer);
+                hoverTimer = null;
+              }
+              if (hoverTarget) {
+                hoverTarget.classList.remove('hover-grouping');
+                hoverTarget = null;
+              }
+              
+              // Limpar ID da tarefa arrastada
+              draggedTaskId = null;
+              
               // Esconder lixeira se cancelar o drag
               if (trashZone) {
                 trashZone.classList.remove('visible', 'drag-over');
@@ -2368,7 +2724,19 @@
           if (tasksContainer && tasksContainer.children.length > 1) {
             activeSortable = new Sortable(tasksContainer, {
               ...commonConfig,
+              group: 'tasks',
+              fallbackTolerance: 3,
               onEnd: function(evt) {
+                // Limpar feedback visual de hover
+                if (hoverTimer) {
+                  clearTimeout(hoverTimer);
+                  hoverTimer = null;
+                }
+                if (hoverTarget) {
+                  hoverTarget.classList.remove('hover-grouping');
+                  hoverTarget = null;
+                }
+                
                 // Verificar se foi solto na lixeira
                 const overTrash = trashZone && isOverTrashZone(evt);
                 
@@ -2382,14 +2750,26 @@
                   }, 160);
                 }
                 
+                const taskEl = evt.item;
+                const taskId = taskEl ? taskEl.dataset.id : null;
+                
                 if (overTrash) {
                   // Excluir tarefa
-                  const taskEl = evt.item;
-                  const taskId = taskEl ? taskEl.dataset.id : null;
                   if (taskId) {
                     deleteTask(taskId);
                   }
                 } else {
+                  // Verificar se a tarefa foi arrastada para fora de um grupo
+                  const oldParent = evt.from;
+                  const newParent = evt.to;
+                  const oldIsGroup = oldParent.classList.contains('task-group');
+                  const newIsGroup = newParent.classList.contains('task-group');
+                  
+                  if (oldIsGroup && !newIsGroup && taskId) {
+                    // Tarefa foi arrastada para fora do grupo
+                    removeFromGroup(currentListId, taskId);
+                  }
+                  
                   // Reorganizar tarefas ativas
                   const taskElements = Array.from(tasksContainer.querySelectorAll('.task'));
                   const activeTasks = [];
@@ -2408,6 +2788,9 @@
                   saveState();
                   requestSync(list.id);
                 }
+                
+                // Limpar ID da tarefa arrastada
+                draggedTaskId = null;
               }
             });
           }
@@ -2417,6 +2800,16 @@
             completedSortable = new Sortable(completedList, {
               ...commonConfig,
               onEnd: function(evt) {
+                // Limpar feedback visual de hover
+                if (hoverTimer) {
+                  clearTimeout(hoverTimer);
+                  hoverTimer = null;
+                }
+                if (hoverTarget) {
+                  hoverTarget.classList.remove('hover-grouping');
+                  hoverTarget = null;
+                }
+                
                 // Verificar se foi solto na lixeira
                 const overTrash = trashZone && isOverTrashZone(evt);
                 
@@ -2430,14 +2823,26 @@
                   }, 160);
                 }
                 
+                const taskEl = evt.item;
+                const taskId = taskEl ? taskEl.dataset.id : null;
+                
                 if (overTrash) {
                   // Excluir tarefa
-                  const taskEl = evt.item;
-                  const taskId = taskEl ? taskEl.dataset.id : null;
                   if (taskId) {
                     deleteTask(taskId);
                   }
                 } else {
+                  // Verificar se a tarefa foi arrastada para fora de um grupo
+                  const oldParent = evt.from;
+                  const newParent = evt.to;
+                  const oldIsGroup = oldParent.classList.contains('task-group');
+                  const newIsGroup = newParent.classList.contains('task-group');
+                  
+                  if (oldIsGroup && !newIsGroup && taskId) {
+                    // Tarefa foi arrastada para fora do grupo
+                    removeFromGroup(currentListId, taskId);
+                  }
+                  
                   // Reorganizar tarefas concluídas
                   const taskElements = Array.from(completedList.querySelectorAll('.task'));
                   const activeTasks = list.tasks.filter(t => !t.done);
@@ -2456,9 +2861,130 @@
                   saveState();
                   requestSync(list.id);
                 }
+                
+                // Limpar ID da tarefa arrastada
+                draggedTaskId = null;
               }
             });
           }
+          
+          // Inicializar sortable para task-groups (permitir drag dentro e entre grupos)
+          const taskGroups = document.querySelectorAll('.task-group');
+          taskGroups.forEach(groupEl => {
+            try {
+              const groupSortable = new Sortable(groupEl, {
+                ...commonConfig,
+                group: 'tasks',
+                fallbackTolerance: 3,
+                onEnd: function(evt) {
+                  // Limpar feedback visual de hover
+                  if (hoverTimer) {
+                    clearTimeout(hoverTimer);
+                    hoverTimer = null;
+                  }
+                  if (hoverTarget) {
+                    hoverTarget.classList.remove('hover-grouping');
+                    hoverTarget = null;
+                  }
+                  
+                  // Verificar se foi solto na lixeira
+                  const overTrash = trashZone && isOverTrashZone(evt);
+                  
+                  // Esconder lixeira
+                  if (trashZone) {
+                    trashZone.classList.remove('visible', 'drag-over');
+                    setTimeout(() => {
+                      if (!trashZone.classList.contains('visible')) {
+                        trashZone.setAttribute('hidden', '');
+                      }
+                    }, 160);
+                  }
+                  
+                  const taskEl = evt.item;
+                  const taskId = taskEl ? taskEl.dataset.id : null;
+                  
+                  if (overTrash) {
+                    // Excluir tarefa
+                    if (taskId) {
+                      deleteTask(taskId);
+                    }
+                  } else {
+                    // Verificar se a tarefa foi arrastada para fora do grupo
+                    const oldParent = evt.from;
+                    const newParent = evt.to;
+                    const oldIsGroup = oldParent.classList.contains('task-group');
+                    const newIsGroup = newParent.classList.contains('task-group');
+                    
+                    if (oldIsGroup && !newIsGroup && taskId) {
+                      // Tarefa foi arrastada para fora do grupo
+                      removeFromGroup(currentListId, taskId);
+                    } else if (!oldIsGroup && newIsGroup && taskId) {
+                      // Tarefa foi arrastada para dentro de um grupo
+                      const groupId = newParent.dataset.groupId;
+                      if (groupId) {
+                        const groups = loadLocalGroups(currentListId);
+                        if (groups[groupId] && !groups[groupId].taskIds.includes(taskId)) {
+                          groups[groupId].taskIds.push(taskId);
+                          deleteEmptyGroups(currentListId, groups);
+                          saveLocalGroups(currentListId, groups);
+                        }
+                      }
+                    } else if (oldIsGroup && newIsGroup && taskId) {
+                      // Tarefa movida entre grupos
+                      const oldGroupId = oldParent.dataset.groupId;
+                      const newGroupId = newParent.dataset.groupId;
+                      if (oldGroupId !== newGroupId) {
+                        const groups = loadLocalGroups(currentListId);
+                        // Remover do grupo antigo
+                        if (groups[oldGroupId]) {
+                          const idx = groups[oldGroupId].taskIds.indexOf(taskId);
+                          if (idx !== -1) {
+                            groups[oldGroupId].taskIds.splice(idx, 1);
+                          }
+                        }
+                        // Adicionar ao novo grupo
+                        if (groups[newGroupId] && !groups[newGroupId].taskIds.includes(taskId)) {
+                          groups[newGroupId].taskIds.push(taskId);
+                        }
+                        deleteEmptyGroups(currentListId, groups);
+                        saveLocalGroups(currentListId, groups);
+                      }
+                    }
+                    
+                    // Reorganizar tarefas conforme necessário
+                    const allTaskElements = Array.from(document.querySelectorAll('#tasksContainer .task, #completedList .task'));
+                    const reorderedTasks = [];
+                    const doneTasks = list.tasks.filter(t => t.done);
+                    const activeTasks = list.tasks.filter(t => !t.done);
+                    
+                    // Usar ordem existente como base
+                    allTaskElements.forEach(el => {
+                      const id = el.dataset.id;
+                      const task = list.tasks.find(t => t.id === id);
+                      if (task && !task.done && !reorderedTasks.includes(task)) {
+                        reorderedTasks.push(task);
+                      }
+                    });
+                    
+                    list.tasks = [...reorderedTasks, ...doneTasks];
+                    updateLocalOrderForList(list.id);
+                    saveState();
+                    requestSync(list.id);
+                  }
+                  
+                  // Limpar ID da tarefa arrastada
+                  draggedTaskId = null;
+                  
+                  // Re-renderizar para atualizar visual dos grupos
+                  setTimeout(() => renderTasks(), 100);
+                }
+              });
+              groupSortables.push(groupSortable);
+            } catch (e) {
+              console.error('Erro ao inicializar Sortable para grupo:', e);
+            }
+          });
+          
         } catch (error) {
           console.error('Erro ao inicializar Sortable para tarefas:', error);
         }
