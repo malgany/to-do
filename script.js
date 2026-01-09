@@ -109,7 +109,16 @@
         
         const groups = loadLocalGroups(listId);
         
-        // IMPORTANTE: Remover draggedTask de qualquer grupo que ela já esteja
+        // IMPORTANTE: Verificar se o target já está em um grupo ANTES de remover
+        let targetGroupId = null;
+        for (const [groupId, group] of Object.entries(groups)) {
+          if (group.taskIds && group.taskIds.includes(targetTaskId)) {
+            targetGroupId = groupId;
+            break;
+          }
+        }
+        
+        // Remover draggedTask de qualquer grupo que ela já esteja
         // para garantir que uma tarefa só esteja em um grupo por vez
         for (const groupId in groups) {
           const index = groups[groupId].taskIds.indexOf(draggedTaskId);
@@ -118,13 +127,10 @@
           }
         }
         
-        // Verificar se o target já está em um grupo
-        const targetGroup = getTaskGroup(listId, targetTaskId);
-        
-        if (targetGroup) {
+        if (targetGroupId) {
           // Adicionar ao grupo existente se ainda não estiver nele
-          if (!targetGroup.taskIds.includes(draggedTaskId)) {
-            groups[targetGroup.groupId].taskIds.push(draggedTaskId);
+          if (!groups[targetGroupId].taskIds.includes(draggedTaskId)) {
+            groups[targetGroupId].taskIds.push(draggedTaskId);
           }
         } else {
           // Criar novo grupo
