@@ -58,6 +58,12 @@
         const allGroups = loadAllGroups();
         allGroups[listId] = groups;
         saveAllGroups(allGroups);
+        
+        // Debug: mostrar quantas tarefas tem em cada grupo
+        console.log('📦 Grupos salvos para lista', listId, ':');
+        for (const [groupId, group] of Object.entries(groups)) {
+          console.log(`  - Grupo ${groupId}: ${group.taskIds.length} tarefas`, group.taskIds);
+        }
       }
 
       // Obter próxima cor disponível na sequência
@@ -102,6 +108,15 @@
         if (draggedTaskId === targetTaskId) return;
         
         const groups = loadLocalGroups(listId);
+        
+        // IMPORTANTE: Remover draggedTask de qualquer grupo que ela já esteja
+        // para garantir que uma tarefa só esteja em um grupo por vez
+        for (const groupId in groups) {
+          const index = groups[groupId].taskIds.indexOf(draggedTaskId);
+          if (index !== -1) {
+            groups[groupId].taskIds.splice(index, 1);
+          }
+        }
         
         // Verificar se o target já está em um grupo
         const targetGroup = getTaskGroup(listId, targetTaskId);
@@ -2923,6 +2938,16 @@
                       const groupId = newParent.dataset.groupId;
                       if (groupId) {
                         const groups = loadLocalGroups(currentListId);
+                        
+                        // Remover de qualquer outro grupo primeiro
+                        for (const gId in groups) {
+                          const idx = groups[gId].taskIds.indexOf(taskId);
+                          if (idx !== -1) {
+                            groups[gId].taskIds.splice(idx, 1);
+                          }
+                        }
+                        
+                        // Adicionar ao novo grupo
                         if (groups[groupId] && !groups[groupId].taskIds.includes(taskId)) {
                           groups[groupId].taskIds.push(taskId);
                           deleteEmptyGroups(currentListId, groups);
