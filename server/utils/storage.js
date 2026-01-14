@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const DATA_DIR = path.join(__dirname, '../../data');
+const DATA_DIR = process.env.NODE_ENV === 'production' ? require('os').tmpdir() : path.join(__dirname, '../../data');
 const LISTS_FILE = path.join(DATA_DIR, 'lists.json');
 const PHOTOS_DIR = path.join(DATA_DIR, 'photos');
 
