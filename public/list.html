@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<meta name="theme-color" content="#2563EB"/>
+<link rel="manifest" href="/manifest.json"/>
+<title>Lista - To-Do App</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#2563EB", // Blue color from screenshot (approx Royal Blue/Blue 600)
+                        "background-light": "#F8FAFC", // Very light slate for background
+                        "background-dark": "#1E293B", // Slate 800 for dark mode background
+                        "surface-light": "#FFFFFF",
+                        "surface-dark": "#334155", // Slate 700 for cards in dark mode
+                        "text-primary-light": "#0F172A", // Slate 900
+                        "text-primary-dark": "#F1F5F9", // Slate 100
+                        "text-secondary-light": "#64748B", // Slate 500
+                        "text-secondary-dark": "#94A3B8", // Slate 400
+                        "border-light": "#E2E8F0", // Slate 200
+                        "border-dark": "#475569", // Slate 600
+                    },
+                    fontFamily: {
+                        display: ["Inter", "sans-serif"],
+                    },
+                    borderRadius: {
+                        DEFAULT: "0.75rem", // 12px
+                    },
+                    boxShadow: {
+                        'soft': '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)',
+                        'float': '0 10px 15px -3px rgba(37, 99, 235, 0.3), 0 4px 6px -2px rgba(37, 99, 235, 0.15)', // Shadow for FAB
+                    }
+                },
+            },
+        };
+    </script>
+<style>.check-transition {
+            transition: all 0.2s ease-in-out;
+        }::-webkit-scrollbar {
+            width: 0px;
+            background: transparent;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display h-screen flex flex-col overflow-hidden text-text-primary-light dark:text-text-primary-dark">
+<header class="flex items-center justify-between px-4 py-4 bg-background-light dark:bg-background-dark z-10">
+<button id="back-btn" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+<span class="material-icons-round text-2xl text-text-primary-light dark:text-text-primary-dark">arrow_back</span>
+</button>
+<div class="flex gap-2">
+<button id="share-btn" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors hidden">
+<span class="material-icons-round text-2xl text-primary">share</span>
+</button>
+<button id="menu-btn" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors hidden">
+<span class="material-icons-round text-2xl text-text-primary-light dark:text-text-primary-dark">more_vert</span>
+</button>
+</div>
+</header>
+<main class="flex-1 overflow-y-auto px-4 pb-24">
+<div class="flex items-center gap-2 mb-6">
+<h1 id="list-title" class="text-3xl font-bold text-text-primary-light dark:text-text-primary-dark">Carregando...</h1>
+<span id="shared-badge" class="hidden bg-primary/10 text-primary text-xs font-semibold px-2 py-1 rounded-full">Compartilhada</span>
+</div>
+<div id="pending-tasks" class="space-y-3 mb-6">
+</div>
+<div id="completed-section" class="mb-3 hidden">
+<button id="toggle-completed" class="flex items-center w-full py-2 group focus:outline-none">
+<span class="material-icons-round text-text-secondary-light dark:text-text-secondary-dark mr-2 transform transition-transform">arrow_drop_down</span>
+<span class="text-base font-semibold text-text-secondary-light dark:text-text-secondary-dark flex-1 text-left">Concluída</span>
+<span id="completed-count" class="bg-blue-100 dark:bg-blue-900/30 text-primary text-xs font-bold px-2 py-0.5 rounded-full">0</span>
+</button>
+</div>
+<div id="completed-tasks" class="space-y-3 opacity-80 hidden"></div>
+</main>
+<div id="fab-container" class="fixed bottom-24 right-6 z-20">
+<button id="fab-add" class="w-14 h-14 bg-primary rounded-full flex items-center justify-center shadow-float hover:scale-105 active:scale-95 transition-transform">
+<span class="material-icons-round text-white text-3xl">add</span>
+</button>
+</div>
+<div id="add-task-bar" class="bg-surface-light dark:bg-surface-dark border-t border-border-light dark:border-border-dark p-4 pb-8 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-30">
+<div class="flex items-center gap-3">
+<div class="relative flex-1">
+<input id="task-input" class="w-full pl-4 pr-4 py-3 bg-white dark:bg-background-dark border border-border-light dark:border-border-dark rounded-lg text-text-primary-light dark:text-text-primary-dark placeholder-text-secondary-light dark:placeholder-text-secondary-dark focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all text-base" placeholder="Adicionar uma tarefa" type="text"/>
+</div>
+<button id="send-task-btn" aria-label="Send task" class="p-3 bg-blue-100 dark:bg-primary/20 text-primary rounded-lg hover:bg-blue-200 dark:hover:bg-primary/30 transition-colors flex items-center justify-center">
+<span class="material-icons-round text-xl">arrow_upward</span>
+</button>
+</div>
+</div>
+
+<!-- Toast para feedback -->
+<div id="toast" class="fixed bottom-32 left-1/2 transform -translate-x-1/2 bg-gray-800 dark:bg-gray-200 text-white dark:text-gray-800 px-6 py-3 rounded-lg shadow-lg opacity-0 transition-opacity duration-300 pointer-events-none z-50">
+<span id="toast-message"></span>
+</div>
+
+<script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+<script src="/js/device.js?v=4"></script>
+<script src="/js/api.js?v=4"></script>
+<script src="/js/socket.js?v=4"></script>
+<script src="/js/list.js?v=4"></script>
+<script>
+// Registrar Service Worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then(registration => {
+        console.log('✅ Service Worker registrado:', registration.scope);
+      })
+      .catch(error => {
+        console.error('❌ Erro ao registrar Service Worker:', error);
+      });
+  });
+}
+</script>
+</body></html>

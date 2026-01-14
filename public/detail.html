@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<meta name="theme-color" content="#2563EB"/>
+<link rel="manifest" href="/manifest.json"/>
+<title>Detalhes da Tarefa - To-Do App</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined|Material+Icons+Round" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#2563EB", // Blue color from screenshot
+                        "primary-hover": "#1D4ED8",
+                        "background-light": "#FFFFFF",
+                        "background-dark": "#121212",
+                        "surface-light": "#F3F4F6",
+                        "surface-dark": "#1E1E1E",
+                        "text-primary-light": "#111827",
+                        "text-primary-dark": "#F9FAFB",
+                        "text-secondary-light": "#6B7280",
+                        "text-secondary-dark": "#9CA3AF",
+                        "border-light": "#E5E7EB",
+                        "border-dark": "#374151",
+                    },
+                    fontFamily: {
+                        display: ["Inter", "sans-serif"],
+                    },
+                    borderRadius: {
+                        DEFAULT: "0.75rem", // Rounded-xl generally
+                    },
+                },
+            },
+        };
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display antialiased min-h-screen flex flex-col transition-colors duration-200">
+<header class="flex items-center px-4 py-4 border-b border-border-light dark:border-border-dark sticky top-0 bg-background-light dark:bg-background-dark z-10">
+<button id="back-btn" class="p-2 -ml-2 rounded-full hover:bg-surface-light dark:hover:bg-surface-dark transition-colors text-text-primary-light dark:text-text-primary-dark">
+<span class="material-icons-outlined text-2xl">arrow_back</span>
+</button>
+<h1 id="list-title" class="ml-2 text-xl font-bold text-text-primary-light dark:text-text-primary-dark">Carregando...</h1>
+</header>
+<main class="flex-1 px-4 py-6 flex flex-col overflow-y-auto">
+<div id="task-card" class="flex items-center p-4 bg-white dark:bg-surface-dark border border-border-light dark:border-border-dark rounded-xl shadow-sm mb-8">
+<div class="relative flex items-center justify-center w-6 h-6 mr-3">
+<input id="task-checkbox" type="checkbox" class="peer appearance-none w-6 h-6 border-2 border-primary rounded-full checked:bg-primary checked:border-primary transition-colors cursor-pointer z-10"/>
+<span class="material-icons-round absolute text-white text-sm opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none">check</span>
+</div>
+<span id="task-text" class="text-base text-text-primary-light dark:text-text-primary-dark font-medium">Carregando...</span>
+</div>
+
+<div class="flex-1 flex flex-col">
+<h2 class="text-lg font-bold text-text-primary-light dark:text-text-primary-dark mb-4">Fotos</h2>
+
+<div id="photos-grid" class="grid grid-cols-2 gap-4 mb-4"></div>
+
+<button id="add-photo-placeholder" class="w-40 h-40 border-2 border-dashed border-border-light dark:border-border-dark rounded-xl flex flex-col items-center justify-center text-text-secondary-light dark:text-text-secondary-dark hover:bg-surface-light dark:hover:bg-surface-dark hover:border-primary dark:hover:border-primary transition-all group">
+<span class="material-icons-outlined text-3xl mb-2 group-hover:text-primary transition-colors">folder_open</span>
+<span class="text-sm font-medium group-hover:text-primary transition-colors text-center px-2">Adicione uma foto</span>
+</button>
+</div>
+</main>
+<div id="photo-buttons" class="p-4 pb-8 bg-background-light dark:bg-background-dark mt-auto space-y-3">
+<button id="camera-btn" class="w-full bg-primary hover:bg-primary-hover text-white font-semibold py-3.5 px-4 rounded-xl flex items-center justify-center shadow-md transition-all active:scale-[0.98]">
+<span class="material-icons-outlined mr-2 text-xl">camera_alt</span>
+            Tirar Foto
+        </button>
+<button id="gallery-btn" class="w-full bg-white dark:bg-surface-dark border border-border-light dark:border-border-dark text-text-primary-light dark:text-text-primary-dark font-semibold py-3.5 px-4 rounded-xl flex items-center justify-center hover:bg-surface-light dark:hover:bg-gray-800 transition-all active:scale-[0.98]">
+            Galeria
+        </button>
+</div>
+
+<!-- Hidden file inputs -->
+<input type="file" id="camera-input" accept="image/*" capture="camera" class="hidden"/>
+<input type="file" id="gallery-input" accept="image/*" class="hidden"/>
+
+<!-- Toast -->
+<div id="toast" class="fixed bottom-32 left-1/2 transform -translate-x-1/2 bg-gray-800 dark:bg-gray-200 text-white dark:text-gray-800 px-6 py-3 rounded-lg shadow-lg opacity-0 transition-opacity duration-300 pointer-events-none z-50">
+<span id="toast-message"></span>
+</div>
+
+<!-- Loading overlay -->
+<div id="loading-overlay" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden flex items-center justify-center">
+<div class="bg-white dark:bg-surface-dark rounded-2xl p-6 flex flex-col items-center">
+<div class="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent mb-4"></div>
+<p class="text-text-primary-light dark:text-text-primary-dark font-medium">Enviando foto...</p>
+</div>
+</div>
+
+<script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+<script src="/js/device.js?v=6"></script>
+<script src="/js/api.js?v=6"></script>
+<script src="/js/socket.js?v=6"></script>
+<script src="/js/detail.js?v=6"></script>
+<script>
+// Registrar Service Worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then(registration => {
+        console.log('✅ Service Worker registrado:', registration.scope);
+      })
+      .catch(error => {
+        console.error('❌ Erro ao registrar Service Worker:', error);
+      });
+  });
+}
+</script>
+</body></html>

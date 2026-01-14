@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<meta name="theme-color" content="#2563EB"/>
+<title>To-Do App</title>
+<link rel="manifest" href="/manifest.json"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet"/>
+<style>.no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#2563EB", // Royal Blue from screenshot buttons
+                        "primary-dark": "#1D4ED8",
+                        "background-light": "#FFFFFF",
+                        "background-dark": "#18181B", // Zinc 900
+                        "surface-light": "#F3F4F6", // Gray 100
+                        "surface-dark": "#27272A", // Zinc 800
+                        "text-main-light": "#111827", // Gray 900
+                        "text-main-dark": "#F9FAFB", // Gray 50
+                        "text-sub-light": "#6B7280", // Gray 500
+                        "text-sub-dark": "#9CA3AF", // Gray 400
+                        "border-light": "#E5E7EB", // Gray 200
+                        "border-dark": "#3F3F46", // Zinc 700
+                    },
+                    fontFamily: {
+                        display: ["Inter", "sans-serif"],
+                    },
+                    borderRadius: {
+                        DEFAULT: "0.75rem", // 12px
+                        'xl': "1rem",
+                        '2xl': "1.5rem",
+                    },
+                    boxShadow: {
+                        'soft': '0 4px 20px -2px rgba(0, 0, 0, 0.05)',
+                        'float': '0 10px 30px -5px rgba(37, 99, 235, 0.3)',
+                    }
+                },
+            },
+        };
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-text-main-light dark:text-text-main-dark transition-colors duration-200 antialiased min-h-screen flex flex-col relative overflow-hidden">
+<header class="px-6 pt-12 pb-4 flex justify-between items-start bg-background-light dark:bg-background-dark z-10 sticky top-0">
+<div>
+<h1 class="text-3xl font-bold tracking-tight text-text-main-light dark:text-text-main-dark mb-1">To-Do</h1>
+<p class="text-sm font-medium text-text-sub-light dark:text-text-sub-dark capitalize" id="current-date">Carregando...</p>
+</div>
+<button aria-label="Settings" class="p-2 rounded-full hover:bg-surface-light dark:hover:bg-surface-dark transition-colors text-primary">
+<span class="material-icons-round text-3xl">grid_view</span>
+</button>
+</header>
+<main class="flex-1 px-6 pb-24 overflow-y-auto no-scrollbar relative">
+<!-- Empty state -->
+<div id="empty-state" class="flex flex-col items-center justify-center h-full text-center space-y-6 mt-10 hidden"> 
+<div class="w-24 h-24 bg-primary/10 rounded-2xl flex items-center justify-center mb-2">
+<span class="material-icons-round text-primary text-5xl">format_list_bulleted</span>
+</div>
+<div class="space-y-2 max-w-xs mx-auto">
+<h2 class="text-xl font-bold text-text-main-light dark:text-text-main-dark">Crie sua primeira lista</h2>
+<p class="text-text-sub-light dark:text-text-sub-dark text-sm leading-relaxed">
+                    Organize tarefas, estudos e ideias com um toque.
+                </p>
+</div>
+<button id="empty-create-btn" class="bg-primary hover:bg-primary-dark text-white font-semibold py-3 px-8 rounded-full shadow-lg shadow-primary/30 transition-all active:scale-95 transform">
+                Nova lista
+            </button>
+</div>
+
+<!-- Lists container -->
+<div id="lists-container" class="space-y-4 mt-2">
+</div>
+</main>
+<div class="fixed bottom-6 right-6 z-20">
+<button id="fab-add" class="bg-primary hover:bg-primary-dark text-white w-14 h-14 rounded-full shadow-float flex items-center justify-center transition-transform hover:scale-105 active:scale-95 group">
+<span class="material-icons-round text-3xl group-hover:rotate-90 transition-transform duration-300">add</span>
+</button>
+</div>
+
+<!-- Modal para criar lista -->
+<div id="create-list-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+<div class="bg-background-light dark:bg-background-dark rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+<h2 class="text-2xl font-bold text-text-main-light dark:text-text-main-dark mb-4">Nova Lista</h2>
+<input id="list-name-input" type="text" placeholder="Nome da lista" class="w-full px-4 py-3 bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark rounded-xl text-text-main-light dark:text-text-main-dark placeholder-text-sub-light dark:placeholder-text-sub-dark focus:ring-2 focus:ring-primary focus:border-transparent outline-none mb-4"/>
+<div class="mb-4">
+<label class="block text-sm font-medium text-text-sub-light dark:text-text-sub-dark mb-2">Ícone</label>
+<div class="grid grid-cols-5 gap-2" id="icon-selector">
+<button class="icon-option p-3 rounded-lg bg-surface-light dark:bg-surface-dark hover:bg-primary/10 border-2 border-transparent" data-icon="list">
+<span class="material-icons-round text-2xl">list</span>
+</button>
+<button class="icon-option p-3 rounded-lg bg-surface-light dark:bg-surface-dark hover:bg-primary/10 border-2 border-transparent" data-icon="work">
+<span class="material-icons-round text-2xl">work</span>
+</button>
+<button class="icon-option p-3 rounded-lg bg-surface-light dark:bg-surface-dark hover:bg-primary/10 border-2 border-transparent" data-icon="shopping_cart">
+<span class="material-icons-round text-2xl">shopping_cart</span>
+</button>
+<button class="icon-option p-3 rounded-lg bg-surface-light dark:bg-surface-dark hover:bg-primary/10 border-2 border-transparent" data-icon="flight">
+<span class="material-icons-round text-2xl">flight</span>
+</button>
+<button class="icon-option p-3 rounded-lg bg-surface-light dark:bg-surface-dark hover:bg-primary/10 border-2 border-transparent" data-icon="home">
+<span class="material-icons-round text-2xl">home</span>
+</button>
+<button class="icon-option p-3 rounded-lg bg-surface-light dark:bg-surface-dark hover:bg-primary/10 border-2 border-transparent" data-icon="favorite">
+<span class="material-icons-round text-2xl">favorite</span>
+</button>
+<button class="icon-option p-3 rounded-lg bg-surface-light dark:bg-surface-dark hover:bg-primary/10 border-2 border-transparent" data-icon="school">
+<span class="material-icons-round text-2xl">school</span>
+</button>
+<button class="icon-option p-3 rounded-lg bg-surface-light dark:bg-surface-dark hover:bg-primary/10 border-2 border-transparent" data-icon="fitness_center">
+<span class="material-icons-round text-2xl">fitness_center</span>
+</button>
+<button class="icon-option p-3 rounded-lg bg-surface-light dark:bg-surface-dark hover:bg-primary/10 border-2 border-transparent" data-icon="restaurant">
+<span class="material-icons-round text-2xl">restaurant</span>
+</button>
+<button class="icon-option p-3 rounded-lg bg-surface-light dark:bg-surface-dark hover:bg-primary/10 border-2 border-transparent" data-icon="local_hospital">
+<span class="material-icons-round text-2xl">local_hospital</span>
+</button>
+</div>
+</div>
+<div class="mb-6">
+<label class="block text-sm font-medium text-text-sub-light dark:text-text-sub-dark mb-2">Cor</label>
+<div class="flex gap-2" id="color-selector">
+<button class="color-option w-10 h-10 rounded-full border-2 border-transparent" data-color="blue" style="background-color: #2563EB;"></button>
+<button class="color-option w-10 h-10 rounded-full border-2 border-transparent" data-color="green" style="background-color: #10B981;"></button>
+<button class="color-option w-10 h-10 rounded-full border-2 border-transparent" data-color="purple" style="background-color: #8B5CF6;"></button>
+<button class="color-option w-10 h-10 rounded-full border-2 border-transparent" data-color="red" style="background-color: #EF4444;"></button>
+<button class="color-option w-10 h-10 rounded-full border-2 border-transparent" data-color="orange" style="background-color: #F59E0B;"></button>
+<button class="color-option w-10 h-10 rounded-full border-2 border-transparent" data-color="pink" style="background-color: #EC4899;"></button>
+</div>
+</div>
+<div class="flex gap-3">
+<button id="cancel-create-btn" class="flex-1 py-3 px-4 rounded-xl border border-border-light dark:border-border-dark text-text-main-light dark:text-text-main-dark font-semibold hover:bg-surface-light dark:hover:bg-surface-dark transition-colors">
+                    Cancelar
+                </button>
+<button id="confirm-create-btn" class="flex-1 py-3 px-4 rounded-xl bg-primary hover:bg-primary-dark text-white font-semibold transition-colors">
+                    Criar
+                </button>
+</div>
+</div>
+</div>
+
+<script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+<script src="/js/device.js?v=5"></script>
+<script src="/js/api.js?v=5"></script>
+<script src="/js/socket.js?v=5"></script>
+<script src="/js/main.js?v=5"></script>
+<script>
+// Registrar Service Worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then(registration => {
+        console.log('✅ Service Worker registrado:', registration.scope);
+      })
+      .catch(error => {
+        console.error('❌ Erro ao registrar Service Worker:', error);
+      });
+  });
+}
+</script>
+</body></html>
+</body></html>
