@@ -4,7 +4,7 @@ const router = express.Router();
 const storage = require('../utils/storage');
 
 // POST /api/lists/:listId/tasks - Adicionar tarefa
-router.post('/:listId/tasks', (req, res) => {
+router.post('/:listId/tasks', async (req, res) => {
   try {
     const { text, deviceId } = req.body;
     const list = storage.getListById(req.params.listId);
@@ -32,15 +32,15 @@ router.post('/:listId/tasks', (req, res) => {
       photos: []
     };
     
-    storage.addTask(req.params.listId, newTask);
-    res.status(201).json(newTask);
+    const createdTask = await storage.addTask(req.params.listId, newTask);
+    res.status(201).json(createdTask);
   } catch (error) {
     res.status(500).json({ error: 'Erro ao adicionar tarefa' });
   }
 });
 
 // PUT /api/lists/:listId/tasks/:taskId/toggle - Toggle complete (permitido para visitantes)
-router.put('/:listId/tasks/:taskId/toggle', (req, res) => {
+router.put('/:listId/tasks/:taskId/toggle', async (req, res) => {
   try {
     const { completed, deviceId } = req.body;
     const list = storage.getListById(req.params.listId);
@@ -55,7 +55,7 @@ router.put('/:listId/tasks/:taskId/toggle', (req, res) => {
       completedBy: completed ? deviceId : null
     };
     
-    const updatedTask = storage.updateTask(req.params.listId, req.params.taskId, updates);
+    const updatedTask = await storage.updateTask(req.params.listId, req.params.taskId, updates);
     
     if (!updatedTask) {
       return res.status(404).json({ error: 'Tarefa não encontrada' });
@@ -68,7 +68,7 @@ router.put('/:listId/tasks/:taskId/toggle', (req, res) => {
 });
 
 // PUT /api/lists/:listId/tasks/:taskId - Atualizar tarefa completa
-router.put('/:listId/tasks/:taskId', (req, res) => {
+router.put('/:listId/tasks/:taskId', async (req, res) => {
   try {
     const { text, deviceId } = req.body;
     const list = storage.getListById(req.params.listId);
@@ -85,7 +85,7 @@ router.put('/:listId/tasks/:taskId', (req, res) => {
     const updates = {};
     if (text) updates.text = text.trim();
     
-    const updatedTask = storage.updateTask(req.params.listId, req.params.taskId, updates);
+    const updatedTask = await storage.updateTask(req.params.listId, req.params.taskId, updates);
     
     if (!updatedTask) {
       return res.status(404).json({ error: 'Tarefa não encontrada' });
@@ -98,7 +98,7 @@ router.put('/:listId/tasks/:taskId', (req, res) => {
 });
 
 // DELETE /api/lists/:listId/tasks/:taskId - Deletar tarefa
-router.delete('/:listId/tasks/:taskId', (req, res) => {
+router.delete('/:listId/tasks/:taskId', async (req, res) => {
   try {
     const { deviceId } = req.body;
     const list = storage.getListById(req.params.listId);
@@ -112,7 +112,7 @@ router.delete('/:listId/tasks/:taskId', (req, res) => {
       return res.status(403).json({ error: 'Sem permissão para deletar tarefas' });
     }
     
-    const success = storage.deleteTask(req.params.listId, req.params.taskId);
+    const success = await storage.deleteTask(req.params.listId, req.params.taskId);
     
     if (!success) {
       return res.status(404).json({ error: 'Tarefa não encontrada' });

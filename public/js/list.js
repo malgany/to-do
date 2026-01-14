@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   
   setupEventListeners();
   await loadList();
-  setupWebSocket();
+  setupPolling();
 });
 
 // Configurar event listeners
@@ -181,9 +181,7 @@ window.handleToggle = async function(taskId, currentCompleted) {
   try {
     // Enviar para servidor
     await toggleTask(listId, taskId, newCompleted);
-    
-    // Broadcast via WebSocket
-    emitTaskCompleted(listId, taskId, newCompleted, deviceId);
+    // Polling detectará a mudança automaticamente
   } catch (error) {
     console.error('Erro ao atualizar tarefa:', error);
     // Reverter
@@ -220,10 +218,8 @@ async function addNewTask() {
     currentList.tasks.push(newTask);
     renderTasks();
     
-    // Broadcast via WebSocket
-    emitTaskAdded(listId, newTask);
-    
     showToast('Tarefa adicionada!');
+    // Polling detectará a mudança para outros usuários
   } catch (error) {
     console.error('Erro ao adicionar tarefa:', error);
     showToast('Erro ao adicionar tarefa');
@@ -273,63 +269,54 @@ async function shareList() {
   }
 }
 
-// Configurar WebSocket
-function setupWebSocket() {
-  // Entrar na sala da lista
-  joinList(listId);
-  
-  // Listeners de eventos
-  onTaskUpdated(({ taskId, completed, completedBy }) => {
-    console.log('Task updated via WebSocket:', taskId, completed);
-    updateTaskState(taskId, completed);
-    
-    // Mostrar quem completou (se não foi este dispositivo)
-    if (completedBy !== deviceId && completed) {
-      showToast('Tarefa marcada como concluída');
-    }
-  });
-  
-  onTaskAdded(({ task }) => {
-    console.log('Task added via WebSocket:', task);
-    // Verificar se já existe
-    if (!currentList.tasks.find(t => t.id === task.id)) {
-      currentList.tasks.push(task);
-      renderTasks();
-      showToast('Nova tarefa adicionada');
-    }
-  });
-  
-  onTaskDeleted(({ taskId }) => {
-    console.log('Task deleted via WebSocket:', taskId);
-    currentList.tasks = currentList.tasks.filter(t => t.id !== taskId);
-    renderTasks();
-    showToast('Tarefa removida');
-  });
-  
-  onTaskEdited(({ taskId, text }) => {
-    console.log('Task edited via WebSocket:', taskId, text);
-    const task = currentList.tasks.find(t => t.id === taskId);
-    if (task) {
-      task.text = text;
-      renderTasks();
-    }
-  });
-  
-  onPhotoAdded(({ taskId, filename }) => {
-    console.log('Photo added via WebSocket:', taskId, filename);
-    const task = currentList.tasks.find(t => t.id === taskId);
-    if (task) {
-      if (!task.photos) task.photos = [];
-      if (!task.photos.includes(filename)) {
-        task.photos.push(filename);
-      }
-    }
-  });
+// Configurar Polling
+function setupPolling() {
+  startPolling(listId, handlePollingUpdate);
 }
 
-// Sair da sala ao fechar a página
+// Lidar com atualizações do polling
+function handlePollingUpdate(data) {
+  // Se lista foi deletada
+  if (data.deleted) {
+    showToast('Esta lista foi removida');
+    setTimeout(() => window.location.href = '/', 2000);
+    return;
+  }
+  
+  // Atualizar lista completa
+  if (data.tasks) {
+    // Detectar mudanças
+    const hasNewTasks = data.tasks.length > currentList.tasks.length;
+    const hasDeletedTasks = data.tasks.length < currentList.tasks.length;
+    
+    // Detectar tarefas modificadas (completed status)
+    let hasCompletedChanges = false;
+    data.tasks.forEach(newTask => {
+      const oldTask = currentList.tasks.find(t => t.id === newTask.id);
+      if (oldTask && oldTask.completed !== newTask.completed) {
+        hasCompletedChanges = true;
+      }
+    });
+    
+    // Atualizar lista local
+    currentList = data;
+    isOwner = currentList.ownerId === deviceId;
+    renderTasks();
+    
+    // Mostrar notificações apropriadas
+    if (hasNewTasks) {
+      showToast('Nova tarefa adicionada');
+    } else if (hasDeletedTasks) {
+      showToast('Tarefa removida');
+    } else if (hasCompletedChanges) {
+      showToast('Tarefa atualizada');
+    }
+  }
+}
+
+// Parar polling ao sair da página
 window.addEventListener('beforeunload', () => {
-  leaveList(listId);
+  stopPolling();
 });
 
 // Utility: Toast

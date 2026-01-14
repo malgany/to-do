@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   
   setupEventListeners();
   await loadTask();
-  setupWebSocket();
+  setupPolling();
 });
 
 // Configurar event listeners
@@ -167,10 +167,8 @@ async function handleToggle() {
     currentTask.completedAt = newCompleted ? new Date().toISOString() : null;
     currentTask.completedBy = newCompleted ? deviceId : null;
     
-    // Broadcast via WebSocket
-    emitTaskCompleted(listId, taskId, newCompleted, deviceId);
-    
     showToast(newCompleted ? 'Tarefa concluída!' : 'Tarefa reaberta');
+    // Polling detectará a mudança para outros usuários
   } catch (error) {
     console.error('Erro ao atualizar tarefa:', error);
     // Reverter checkbox
@@ -209,10 +207,8 @@ async function handlePhotoUpload(event) {
     // Re-renderizar
     renderPhotos();
     
-    // Broadcast via WebSocket
-    emitPhotoAdded(listId, taskId, result.filename);
-    
     showToast('Foto adicionada!');
+    // Polling detectará a mudança para outros usuários
   } catch (error) {
     console.error('Erro ao fazer upload:', error);
     showToast('Erro ao enviar foto');
@@ -262,38 +258,55 @@ window.openPhotoModal = function(photoUrl) {
   document.body.appendChild(modal);
 };
 
-// Configurar WebSocket
-function setupWebSocket() {
-  // Entrar na sala da lista
-  joinList(listId);
-  
-  // Listeners de eventos
-  onTaskUpdated(({ taskId: updatedTaskId, completed }) => {
-    if (updatedTaskId === taskId) {
-      console.log('Task updated via WebSocket:', completed);
-      currentTask.completed = completed;
-      document.getElementById('task-checkbox').checked = completed;
-      showToast(completed ? 'Tarefa marcada como concluída' : 'Tarefa reaberta');
-    }
-  });
-  
-  onPhotoAdded(({ taskId: updatedTaskId, filename }) => {
-    if (updatedTaskId === taskId) {
-      console.log('Photo added via WebSocket:', filename);
-      // Verificar se já existe
-      if (!currentTask.photos) currentTask.photos = [];
-      if (!currentTask.photos.includes(filename)) {
-        currentTask.photos.push(filename);
-        renderPhotos();
-        showToast('Nova foto adicionada');
-      }
-    }
-  });
+// Configurar Polling
+function setupPolling() {
+  startPolling(listId, handlePollingUpdate);
 }
 
-// Sair da sala ao fechar
+// Lidar com atualizações do polling
+function handlePollingUpdate(data) {
+  // Se lista foi deletada
+  if (data.deleted) {
+    showToast('Esta lista foi removida');
+    setTimeout(() => window.location.href = '/', 2000);
+    return;
+  }
+  
+  // Atualizar tarefa
+  if (data.tasks) {
+    const updatedTask = data.tasks.find(t => t.id === taskId);
+    
+    // Se tarefa foi deletada
+    if (!updatedTask) {
+      showToast('Esta tarefa foi removida');
+      setTimeout(() => window.location.href = `/list.html?id=${listId}`, 2000);
+      return;
+    }
+    
+    // Detectar mudanças
+    const completedChanged = updatedTask.completed !== currentTask.completed;
+    const photosAdded = updatedTask.photos && updatedTask.photos.length > (currentTask.photos || []).length;
+    
+    // Atualizar task local
+    currentTask = updatedTask;
+    currentList = data;
+    
+    // Atualizar UI
+    document.getElementById('task-checkbox').checked = currentTask.completed;
+    renderPhotos();
+    
+    // Notificações
+    if (completedChanged) {
+      showToast(currentTask.completed ? 'Tarefa marcada como concluída' : 'Tarefa reaberta');
+    } else if (photosAdded) {
+      showToast('Nova foto adicionada');
+    }
+  }
+}
+
+// Parar polling ao sair
 window.addEventListener('beforeunload', () => {
-  leaveList(listId);
+  stopPolling();
 });
 
 // Utility: Loading overlay

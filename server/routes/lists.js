@@ -20,6 +20,13 @@ router.get('/:id', (req, res) => {
     if (!list) {
       return res.status(404).json({ error: 'Lista não encontrada' });
     }
+    
+    // Suporte para polling - retornar apenas se houver mudanças
+    const since = req.query.since;
+    if (since && list.updatedAt && list.updatedAt <= since) {
+      return res.json({ unchanged: true, updatedAt: list.updatedAt });
+    }
+    
     res.json(list);
   } catch (error) {
     res.status(500).json({ error: 'Erro ao carregar lista' });
@@ -27,7 +34,7 @@ router.get('/:id', (req, res) => {
 });
 
 // POST /api/lists - Criar nova lista
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   try {
     const { name, icon, color, ownerId } = req.body;
     
@@ -45,15 +52,15 @@ router.post('/', (req, res) => {
       tasks: []
     };
     
-    storage.createList(newList);
-    res.status(201).json(newList);
+    const createdList = await storage.createList(newList);
+    res.status(201).json(createdList);
   } catch (error) {
     res.status(500).json({ error: 'Erro ao criar lista' });
   }
 });
 
 // PUT /api/lists/:id - Atualizar lista
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
     const { name, icon, color, deviceId } = req.body;
     const list = storage.getListById(req.params.id);
@@ -72,7 +79,7 @@ router.put('/:id', (req, res) => {
     if (icon) updates.icon = icon;
     if (color) updates.color = color;
     
-    const updatedList = storage.updateList(req.params.id, updates);
+    const updatedList = await storage.updateList(req.params.id, updates);
     res.json(updatedList);
   } catch (error) {
     res.status(500).json({ error: 'Erro ao atualizar lista' });
@@ -80,7 +87,7 @@ router.put('/:id', (req, res) => {
 });
 
 // DELETE /api/lists/:id - Deletar lista
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
     const { deviceId } = req.body;
     const list = storage.getListById(req.params.id);
@@ -94,7 +101,7 @@ router.delete('/:id', (req, res) => {
       return res.status(403).json({ error: 'Sem permissão para deletar esta lista' });
     }
     
-    storage.deleteList(req.params.id);
+    await storage.deleteList(req.params.id);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao deletar lista' });
