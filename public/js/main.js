@@ -243,7 +243,7 @@ async function createNewList() {
   const name = nameInput.value.trim();
   
   if (!name) {
-    alert('Por favor, digite um nome para a lista');
+    await showAlert('Por favor, digite um nome para a lista', 'warning');
     return;
   }
   
@@ -261,7 +261,17 @@ async function createNewList() {
 
 // Deletar lista
 window.deleteListPrompt = async function(listId, listName) {
-  if (!confirm(`Deseja realmente excluir a lista "${listName}"?\n\nTodas as tarefas serão perdidas.`)) {
+  const confirmed = await showConfirm(
+    `Deseja realmente excluir a lista "${listName}"?\n\nTodas as tarefas serão perdidas.`,
+    {
+      title: 'Excluir Lista',
+      confirmText: 'Excluir',
+      cancelText: 'Cancelar',
+      type: 'danger'
+    }
+  );
+  
+  if (!confirmed) {
     return;
   }
   
@@ -271,7 +281,7 @@ window.deleteListPrompt = async function(listId, listName) {
     await loadLists();
   } catch (error) {
     console.error('Erro ao deletar lista:', error);
-    alert('Erro ao deletar lista: ' + error.message);
+    await showAlert('Erro ao deletar lista: ' + error.message, 'error');
   }
 };
 

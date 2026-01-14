@@ -117,7 +117,11 @@ function getPhotoUrl(filename) {
 // Tratamento de erros global
 function showError(message) {
   console.error('Erro:', message);
-  // Você pode adicionar um toast ou notificação visual aqui
-  alert(message);
+  // Usar alerta personalizado se disponível
+  if (typeof showAlert === 'function') {
+    showAlert(message, 'error');
+  } else {
+    alert(message);
+  }
 }
 

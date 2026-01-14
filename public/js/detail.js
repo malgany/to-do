@@ -220,10 +220,20 @@ async function handlePhotoUpload(event) {
 }
 
 // Deletar foto (apenas owner)
-window.deletePhoto = function(filename) {
+window.deletePhoto = async function(filename) {
   if (!isOwner) return;
   
-  if (!confirm('Deseja remover esta foto?')) return;
+  const confirmed = await showConfirm(
+    'Deseja remover esta foto?',
+    {
+      title: 'Remover Foto',
+      confirmText: 'Remover',
+      cancelText: 'Cancelar',
+      type: 'warning'
+    }
+  );
+  
+  if (!confirmed) return;
   
   // Remover da lista local
   currentTask.photos = currentTask.photos.filter(f => f !== filename);
