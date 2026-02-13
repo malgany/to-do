@@ -1,3 +1,6 @@
 # Cursor IDE
 .cursor
+/node_modules
+/report
+/data
 

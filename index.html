@@ -244,15 +244,35 @@
     };
 
     const firebaseApp = initializeApp(firebaseConfig);
-    initializeAppCheck(firebaseApp, {
-      provider: new ReCaptchaV3Provider('6LfoGtUrAAAAAI_hvP9snJSkpCkBjrGgHHWbxcup'),
-      isTokenAutoRefreshEnabled: true,
-    });
+    try{
+      initializeAppCheck(firebaseApp, {
+        provider: new ReCaptchaV3Provider('6LfoGtUrAAAAAI_hvP9snJSkpCkBjrGgHHWbxcup'),
+        isTokenAutoRefreshEnabled: true,
+      });
+    }catch(error){
+      console.warn('[firebase] App Check unavailable, continuing without it.', error);
+    }
     const firebaseDb = getDatabase(firebaseApp);
 
     const MAX_SHARED_PHOTOS = 4;
     const MAX_SHARED_PHOTO_DATA_LENGTH = 400000; // ~400 KB
     const MAX_SHARED_PAYLOAD_SIZE = 7 * 1024 * 1024; // 7 MB
+
+    function normalizeShareCode(code){
+      try{
+        return String(code || '').replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
+      }catch(_){
+        return '';
+      }
+    }
+
+    function assertValidShareCode(code){
+      const normalizedCode = normalizeShareCode(code);
+      if(normalizedCode.length !== 6){
+        throw new Error('Codigo de compartilhamento invalido.');
+      }
+      return normalizedCode;
+    }
 
     function createSharedPhotoId(){
       return 'p_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2, 8);
@@ -362,13 +382,13 @@
 
     async function shareListToFirebase(code, list){
       if(!code || !list) throw new Error('Parâmetros inválidos');
-      const normalizedCode = String(code).replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
+      const normalizedCode = assertValidShareCode(code);
       const payload = buildSharedPayload(list);
       await set(ref(firebaseDb, `sharedLists/${normalizedCode}`), payload);
     }
 
     async function getListFromFirebase(code){
-      const normalizedCode = String(code).replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
+      const normalizedCode = assertValidShareCode(code);
       const snapshot = await get(child(ref(firebaseDb), `sharedLists/${normalizedCode}`));
       if(snapshot.exists()){
         return normalizeRemoteListData(snapshot.val());
@@ -377,33 +397,49 @@
     }
 
     async function deleteListFromFirebase(code){
-      const normalizedCode = String(code).replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
-      if(!normalizedCode) return;
+      const normalizedCode = assertValidShareCode(code);
       await remove(ref(firebaseDb, `sharedLists/${normalizedCode}`));
     }
 
-    const activeSubscriptions = Object.create(null);
+    const activeSubscriptions = new Map();
 
     function subscribeToList(code, handler){
-      const normalizedCode = String(code).replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
-      if(!normalizedCode || normalizedCode.length!==6) return;
-      const pathRef = ref(firebaseDb, `sharedLists/${normalizedCode}`);
+      const normalizedCode = assertValidShareCode(code);
+      if(typeof handler !== 'function'){
+        throw new Error('Handler de assinatura invalido.');
+      }
+      let entry = activeSubscriptions.get(normalizedCode);
+      if(!entry){
+        entry = {
+          ref: ref(firebaseDb, `sharedLists/${normalizedCode}`),
+          listeners: new Set(),
+        };
+        activeSubscriptions.set(normalizedCode, entry);
+      }
       const listener = (snapshot)=>{
-        if(typeof handler === 'function'){
-          const payload = snapshot.exists() ? normalizeRemoteListData(snapshot.val()) : null;
-          handler(payload);
-        }
+        const payload = snapshot.exists() ? normalizeRemoteListData(snapshot.val()) : null;
+        handler(payload);
       };
-      onValue(pathRef, listener);
-      activeSubscriptions[normalizedCode] = { ref: pathRef, listener };
+      onValue(entry.ref, listener);
+      entry.listeners.add(listener);
+      return listener;
     }
 
-    function unsubscribeFromList(code){
-      const normalizedCode = String(code).replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
-      const sub = activeSubscriptions[normalizedCode];
-      if(sub){
-        off(sub.ref, 'value', sub.listener);
-        delete activeSubscriptions[normalizedCode];
+    function unsubscribeFromList(code, handler){
+      const normalizedCode = assertValidShareCode(code);
+      const entry = activeSubscriptions.get(normalizedCode);
+      if(!entry){ return; }
+      if(typeof handler === 'function'){
+        off(entry.ref, 'value', handler);
+        entry.listeners.delete(handler);
+      } else {
+        entry.listeners.forEach((listener)=>{
+          off(entry.ref, 'value', listener);
+        });
+        entry.listeners.clear();
+      }
+      if(entry.listeners.size===0){
+        activeSubscriptions.delete(normalizedCode);
       }
     }
 
