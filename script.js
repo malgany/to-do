@@ -1,14 +1,22 @@
 (function(){
       // State
-      let lists = []; // {id, title, tasks: [{id,text,done,photos:[]}]} 
+      let lists = []; // {id, title, tasks: [{id,text,done,photos:[], ...syncMeta}]} 
       let currentListId = null;
       let currentTaskId = null;
       let completedCollapsed = false;
+      const LIST_STORAGE_KEY = 'todo_lists_v4';
+      const LEGACY_LIST_STORAGE_KEY = 'todo_lists_v3';
       const COMPLETED_COLLAPSE_STORAGE_KEY = 'todo_completed_collapsed_v1';
-      const LOCAL_ORDER_STORAGE_KEY = 'todo_local_order_v1';
+      const LOCAL_ORDER_STORAGE_KEY = 'todo_local_order_v2';
+      const LEGACY_LOCAL_ORDER_STORAGE_KEY = 'todo_local_order_v1';
+      const SYNC_OUTBOX_STORAGE_KEY = 'todo_sync_outbox_v1';
+      const CLIENT_ID_STORAGE_KEY = 'todo_client_id_v1';
+      const SHARED_SCHEMA_VERSION = 2;
       let completedCollapseByList = {};
       let localOrderByList = {};
+      let syncOutboxByList = {};
       let lastValidTaskText = '';
+      const clientId = loadOrCreateClientId();
       const el = id=>document.getElementById(id);
       const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -236,6 +244,7 @@
       const shareCodeValue = el('shareCodeValue');
       const shareCopyBtn = el('shareCopyBtn');
       const shareCopyFeedback = el('shareCopyFeedback');
+      const shareRetryBtn = el('shareRetryBtn');
       const shareCloseBtn = el('shareCloseBtn');
       const resetAppAction = el('resetAppAction');
       const deleteListAction = el('deleteListAction');
@@ -676,6 +685,7 @@
       const photoLightboxDelete = photoLightbox ? photoLightbox.querySelector('.photo-lightbox-btn.delete') : null;
       const cameraPhotoButton = document.querySelector('.task-media-footer .photo-action.primary');
       const galleryPhotoButton = document.querySelector('.task-media-footer .photo-action:not(.primary)');
+      const taskDeleteButton = el('taskDeleteButton');
       const taskPhotoGridEmpty = taskPhotoGrid ? taskPhotoGrid.querySelector('.photo-grid-empty') : null;
 
       // helpers
@@ -685,6 +695,7 @@
       let confirmResolver = null;
       // Sync helpers
       let syncTimers = Object.create(null);
+      let syncFlushes = Object.create(null);
       let liveSubscriptions = Object.create(null);
       let realtimeRetryTimers = Object.create(null);
 
@@ -932,11 +943,11 @@
         if(!currentListId || !currentTaskId) return null;
         const list = lists.find((x)=>x && x.id===currentListId);
         if(!list || !Array.isArray(list.tasks)) return null;
-        return list.tasks.find((t)=>t && t.id===currentTaskId) || null;
+        return findTaskById(list, currentTaskId, false);
       }
 
       function updatePhotoActionState(task){
-        const photos = task && Array.isArray(task.photos) ? task.photos : [];
+        const photos = getVisiblePhotos(task);
         const remaining = Math.max(0, MAX_PHOTOS_PER_TASK - photos.length);
         const disable = remaining <= 0;
         [cameraPhotoButton, galleryPhotoButton].forEach((btn)=>{
@@ -955,7 +966,7 @@
 
       function renderTaskPhotos(task){
         if(!taskPhotoGrid) return;
-        const photos = task && Array.isArray(task.photos) ? task.photos : [];
+        const photos = getVisiblePhotos(task);
         taskPhotoGrid.querySelectorAll('.photo-grid-item').forEach((node)=> node.remove());
         if(!photos.length){
           if(taskPhotoGridEmpty){ taskPhotoGridEmpty.style.display = ''; }
@@ -986,7 +997,7 @@
           return;
         }
         ensureTaskStructure(task);
-        if(Array.isArray(task.photos) && task.photos.length >= MAX_PHOTOS_PER_TASK){
+        if(getVisiblePhotos(task).length >= MAX_PHOTOS_PER_TASK){
           updatePhotoActionState(task);
           showToast('Limite de 4 fotos por tarefa atingido.', { type: 'error' });
           return;
@@ -1004,7 +1015,7 @@
         if(!photoLightbox || !photoLightboxImage){ return; }
         const task = getCurrentTask();
         if(!task){ return; }
-        const photo = (task.photos || []).find((p)=>p && p.id===photoId);
+        const photo = findPhotoById(task, photoId, false);
         if(!photo){ return; }
         activePhotoId = photoId;
         photoLightboxImage.src = photo.dataUrl;
@@ -1038,14 +1049,16 @@
         if(!currentListId || !currentTaskId || !activePhotoId) return;
         const list = lists.find((x)=>x && x.id===currentListId);
         if(!list || !Array.isArray(list.tasks)) return;
-        const task = list.tasks.find((t)=>t && t.id===currentTaskId);
+        const task = findTaskById(list, currentTaskId, false);
         if(!task || !Array.isArray(task.photos)) return;
-        const idx = task.photos.findIndex((p)=>p && p.id===activePhotoId);
-        if(idx===-1) return;
-        task.photos.splice(idx, 1);
-        clearPendingPhotos(list.id, task.id, [activePhotoId]);
-        markRemovedPhoto(list.id, task.id, activePhotoId);
+        const ts = nowTs();
+        touchListMeta(list, ts, clientId);
+        const photo = markPhotoDeleted(task, activePhotoId, ts, clientId);
+        if(!photo) return;
         ensureTaskStructure(task);
+        enqueueSyncOperation(list, buildPhotoPatch(list, task, photo), [
+          { kind:'photo_delete', taskId: task.id, photoId: photo.id, at: photo.deletedAt, by: photo.deletedBy }
+        ]);
         renderTaskPhotos(task);
         updatePhotoActionState(task);
         saveState();
@@ -1074,7 +1087,7 @@
           return;
         }
         ensureTaskStructure(task);
-        const currentCount = Array.isArray(task.photos) ? task.photos.length : 0;
+        const currentCount = getVisiblePhotos(task).length;
         const availableSlots = Math.max(0, MAX_PHOTOS_PER_TASK - currentCount);
         if(availableSlots <= 0){
           updatePhotoActionState(task);
@@ -1097,11 +1110,24 @@
           }
         }
         if(newPhotos.length){
-          task.photos = (task.photos || []).concat(newPhotos).slice(0, MAX_PHOTOS_PER_TASK);
+          const list = lists.find((entry)=> entry && entry.id===currentListId);
+          const ts = nowTs();
+          if(list){ touchListMeta(list, ts, clientId); }
+          const addedPhotos = [];
+          newPhotos.forEach((photo)=>{
+            const upserted = upsertTaskPhoto(task, photo, ts, clientId);
+            if(upserted && !previousIds.has(String(upserted.id))){
+              addedPhotos.push(upserted);
+            }
+          });
           ensureTaskStructure(task);
-          const addedPhotos = (task.photos || [])
-            .filter((photo)=> photo && !previousIds.has(String(photo.id)));
-          markPendingPhotos(currentListId, task.id, addedPhotos);
+          if(list){
+            addedPhotos.forEach((photo)=>{
+              enqueueSyncOperation(list, buildPhotoPatch(list, task, photo), [
+                { kind:'photo_upsert', taskId: task.id, photoId: photo.id, at: photo.updatedAt, by: photo.updatedBy }
+              ]);
+            });
+          }
           renderTaskPhotos(task);
           saveState();
           requestSync(currentListId);
@@ -1563,6 +1589,797 @@
         }
       }
 
+      function loadOrCreateClientId(){
+        try{
+          const existing = localStorage.getItem(CLIENT_ID_STORAGE_KEY);
+          if(existing && String(existing).trim()){
+            return String(existing).trim();
+          }
+          const created = 'client_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2, 8);
+          localStorage.setItem(CLIENT_ID_STORAGE_KEY, created);
+          return created;
+        }catch(_){
+          return 'client_ephemeral';
+        }
+      }
+
+      function nowTs(){
+        return Date.now();
+      }
+
+      function normalizeTimestamp(value, fallback){
+        const num = Number(value);
+        return Number.isFinite(num) ? num : fallback;
+      }
+
+      function normalizeActor(value, fallback){
+        try{
+          const normalized = String(value || '').trim().slice(0, 96);
+          return normalized || String(fallback || '').trim().slice(0, 96) || clientId;
+        }catch(_){
+          return String(fallback || clientId);
+        }
+      }
+
+      function compareVersion(aAt, aBy, bAt, bBy){
+        const at = normalizeTimestamp(aAt, 0);
+        const bt = normalizeTimestamp(bAt, 0);
+        if(at !== bt){ return at - bt; }
+        const actorA = String(aBy || '');
+        const actorB = String(bBy || '');
+        if(actorA === actorB){ return 0; }
+        return actorA > actorB ? 1 : -1;
+      }
+
+      function pickLatestVersion(entries, fallback){
+        let winner = {
+          at: normalizeTimestamp(fallback && fallback.at, nowTs()),
+          by: normalizeActor(fallback && fallback.by, clientId)
+        };
+        (entries || []).forEach((entry)=>{
+          if(!entry){ return; }
+          const at = normalizeTimestamp(entry.at, 0);
+          const by = normalizeActor(entry.by, winner.by);
+          if(compareVersion(at, by, winner.at, winner.by) > 0){
+            winner = { at, by };
+          }
+        });
+        return winner;
+      }
+
+      function createTaskId(){
+        return 't_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2, 8);
+      }
+
+      function isTaskDeleted(task){
+        return !!(task && task.deletedAt != null);
+      }
+
+      function isPhotoDeleted(photo){
+        return !!(photo && photo.deletedAt != null);
+      }
+
+      function getVisibleTasks(list){
+        if(!list || !Array.isArray(list.tasks)){ return []; }
+        return list.tasks.filter((task)=> task && !isTaskDeleted(task));
+      }
+
+      function getVisiblePhotos(task){
+        if(!task || !Array.isArray(task.photos)){ return []; }
+        return task.photos.filter((photo)=> photo && !isPhotoDeleted(photo) && typeof photo.dataUrl === 'string' && photo.dataUrl);
+      }
+
+      function findTaskById(list, taskId, includeDeleted){
+        if(!list || !Array.isArray(list.tasks) || !taskId){ return null; }
+        const allowDeleted = !!includeDeleted;
+        return list.tasks.find((task)=> task && task.id===taskId && (allowDeleted || !isTaskDeleted(task))) || null;
+      }
+
+      function findPhotoById(task, photoId, includeDeleted){
+        if(!task || !Array.isArray(task.photos) || !photoId){ return null; }
+        const allowDeleted = !!includeDeleted;
+        return task.photos.find((photo)=> photo && photo.id===photoId && (allowDeleted || !isPhotoDeleted(photo))) || null;
+      }
+
+      function ensurePhotoStructure(photo, fallbackActor, options){
+        if(!photo || typeof photo !== 'object'){ return null; }
+        const opts = Object.assign({ allowDeletedWithoutData:true }, options||{});
+        const actor = normalizeActor(fallbackActor, clientId);
+        const deletedAt = photo.deletedAt == null ? null : normalizeTimestamp(photo.deletedAt, null);
+        const rawDataUrl = typeof photo.dataUrl === 'string' ? String(photo.dataUrl) : '';
+        if(!deletedAt && !rawDataUrl){ return null; }
+        if(!photo.id){ photo.id = createPhotoId(); }
+        const createdAt = normalizeTimestamp(photo.createdAt, nowTs());
+        photo.createdAt = createdAt;
+        photo.updatedAt = Math.max(createdAt, normalizeTimestamp(photo.updatedAt, createdAt));
+        photo.updatedBy = normalizeActor(photo.updatedBy, actor);
+        photo.deletedAt = deletedAt;
+        photo.deletedBy = deletedAt == null ? '' : normalizeActor(photo.deletedBy, photo.updatedBy);
+        photo.dataUrl = deletedAt != null && opts.allowDeletedWithoutData ? (rawDataUrl || null) : rawDataUrl;
+        return photo;
+      }
+
+      function refreshTaskAggregateMetadata(task){
+        if(!task || typeof task !== 'object'){ return; }
+        const latest = pickLatestVersion([
+          { at: task.textUpdatedAt, by: task.textUpdatedBy },
+          { at: task.doneUpdatedAt, by: task.doneUpdatedBy },
+          { at: task.deletedAt, by: task.deletedBy },
+          ...(Array.isArray(task.photos) ? task.photos.map((photo)=> photo ? ({ at: photo.updatedAt, by: photo.updatedBy }) : null) : [])
+        ], { at: task.updatedAt || task.createdAt || nowTs(), by: task.updatedBy || task.textUpdatedBy || clientId });
+        task.updatedAt = latest.at;
+        task.updatedBy = latest.by;
+      }
+
+      function ensureTaskStructure(task, fallbackActor){
+        if(!task || typeof task !== 'object'){ return; }
+        const actor = normalizeActor(fallbackActor, clientId);
+        if(!task.id){ task.id = createTaskId(); }
+        if(typeof task.text !== 'string'){ task.text = ''; }
+        task.done = !!task.done;
+        task.createdAt = normalizeTimestamp(task.createdAt, nowTs());
+        task.textUpdatedAt = Math.max(task.createdAt, normalizeTimestamp(task.textUpdatedAt, normalizeTimestamp(task.updatedAt, task.createdAt)));
+        task.textUpdatedBy = normalizeActor(task.textUpdatedBy, actor);
+        task.doneUpdatedAt = Math.max(task.createdAt, normalizeTimestamp(task.doneUpdatedAt, normalizeTimestamp(task.updatedAt, task.createdAt)));
+        task.doneUpdatedBy = normalizeActor(task.doneUpdatedBy, actor);
+        task.deletedAt = task.deletedAt == null ? null : normalizeTimestamp(task.deletedAt, null);
+        task.deletedBy = task.deletedAt == null ? '' : normalizeActor(task.deletedBy, actor);
+        const normalizedPhotos = [];
+        const seen = new Set();
+        if(Array.isArray(task.photos)){
+          task.photos.forEach((photo)=>{
+            const normalized = ensurePhotoStructure(photo, actor);
+            if(!normalized){ return; }
+            let id = String(normalized.id || '');
+            if(!id){ id = createPhotoId(); }
+            while(seen.has(id)){ id = createPhotoId(); }
+            normalized.id = id;
+            seen.add(id);
+            normalizedPhotos.push(normalized);
+          });
+        }
+        task.photos = normalizedPhotos.slice(0, MAX_PHOTOS_PER_TASK);
+        task.updatedBy = normalizeActor(task.updatedBy, actor);
+        refreshTaskAggregateMetadata(task);
+      }
+
+      function ensureListStructure(list){
+        if(!list || typeof list !== 'object'){ return; }
+        if(!list.id){ list.id = 'l_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2, 6); }
+        if(typeof list.title !== 'string' || !list.title.trim()){ list.title = 'Lista'; }
+        if(!Array.isArray(list.tasks)){ list.tasks = []; }
+        list.clientId = normalizeActor(list.clientId, clientId);
+        list.metaUpdatedAt = normalizeTimestamp(list.metaUpdatedAt, normalizeTimestamp(list.updatedAt, nowTs()));
+        list.metaUpdatedBy = normalizeActor(list.metaUpdatedBy, list.clientId);
+        if(typeof list.shareCreated !== 'boolean' && String(list.shareCode||'').replace(/[^0-9A-Z]/gi,'').toUpperCase().length===6){
+          list.shareCreated = true;
+        }
+        list.tasks.forEach((task)=> ensureTaskStructure(task, list.clientId));
+      }
+
+      function touchListMeta(list, timestamp, actor){
+        if(!list){ return; }
+        list.metaUpdatedAt = normalizeTimestamp(timestamp, nowTs());
+        list.metaUpdatedBy = normalizeActor(actor, clientId);
+      }
+
+      function setTaskTextCommit(task, text, timestamp, actor){
+        if(!task){ return; }
+        task.text = typeof text === 'string' ? text : '';
+        task.textUpdatedAt = normalizeTimestamp(timestamp, nowTs());
+        task.textUpdatedBy = normalizeActor(actor, clientId);
+        refreshTaskAggregateMetadata(task);
+      }
+
+      function setTaskDoneCommit(task, done, timestamp, actor){
+        if(!task){ return; }
+        task.done = !!done;
+        task.doneUpdatedAt = normalizeTimestamp(timestamp, nowTs());
+        task.doneUpdatedBy = normalizeActor(actor, clientId);
+        refreshTaskAggregateMetadata(task);
+      }
+
+      function markTaskDeleted(task, timestamp, actor){
+        if(!task){ return; }
+        task.deletedAt = normalizeTimestamp(timestamp, nowTs());
+        task.deletedBy = normalizeActor(actor, clientId);
+        refreshTaskAggregateMetadata(task);
+      }
+
+      function upsertTaskPhoto(task, photo, timestamp, actor){
+        if(!task || !photo){ return null; }
+        const ts = normalizeTimestamp(timestamp, nowTs());
+        const by = normalizeActor(actor, clientId);
+        const normalized = ensurePhotoStructure({
+          id: photo.id || createPhotoId(),
+          dataUrl: photo.dataUrl,
+          createdAt: normalizeTimestamp(photo.createdAt, ts),
+          updatedAt: ts,
+          updatedBy: by,
+          deletedAt: null,
+          deletedBy: ''
+        }, by);
+        if(!normalized){ return null; }
+        if(!Array.isArray(task.photos)){ task.photos = []; }
+        const existing = findPhotoById(task, normalized.id, true);
+        if(existing){
+          existing.dataUrl = normalized.dataUrl;
+          existing.createdAt = Math.min(existing.createdAt || normalized.createdAt, normalized.createdAt);
+          existing.updatedAt = normalized.updatedAt;
+          existing.updatedBy = normalized.updatedBy;
+          existing.deletedAt = null;
+          existing.deletedBy = '';
+        } else {
+          task.photos.push(normalized);
+        }
+        refreshTaskAggregateMetadata(task);
+        return findPhotoById(task, normalized.id, true);
+      }
+
+      function markPhotoDeleted(task, photoId, timestamp, actor){
+        if(!task || !photoId){ return null; }
+        const photo = findPhotoById(task, photoId, true);
+        if(!photo){ return null; }
+        photo.deletedAt = normalizeTimestamp(timestamp, nowTs());
+        photo.deletedBy = normalizeActor(actor, clientId);
+        photo.updatedAt = photo.deletedAt;
+        photo.updatedBy = photo.deletedBy;
+        photo.dataUrl = photo.dataUrl || null;
+        refreshTaskAggregateMetadata(task);
+        return photo;
+      }
+
+      function mergePhotoEntities(localPhoto, remotePhoto, fallbackActor){
+        const actor = normalizeActor(fallbackActor, clientId);
+        const left = localPhoto ? Object.assign({}, localPhoto) : null;
+        const right = remotePhoto ? Object.assign({}, remotePhoto) : null;
+        if(left){ ensurePhotoStructure(left, actor); }
+        if(right){ ensurePhotoStructure(right, actor); }
+        if(!left && !right){ return null; }
+        if(!left){ return right; }
+        if(!right){ return left; }
+        const base = compareVersion(right.updatedAt, right.updatedBy, left.updatedAt, left.updatedBy) > 0 ? right : left;
+        const other = base === right ? left : right;
+        const merged = Object.assign({}, other, base);
+        merged.id = left.id || right.id;
+        merged.createdAt = Math.min(normalizeTimestamp(left.createdAt, nowTs()), normalizeTimestamp(right.createdAt, nowTs()));
+        const deleteWinner = compareVersion(right.deletedAt, right.deletedBy, left.deletedAt, left.deletedBy) > 0
+          ? { at: right.deletedAt, by: right.deletedBy }
+          : { at: left.deletedAt, by: left.deletedBy };
+        if(deleteWinner.at != null){
+          merged.deletedAt = deleteWinner.at;
+          merged.deletedBy = normalizeActor(deleteWinner.by, merged.updatedBy);
+          merged.dataUrl = merged.dataUrl || null;
+        } else {
+          merged.deletedAt = null;
+          merged.deletedBy = '';
+        }
+        return ensurePhotoStructure(merged, actor);
+      }
+
+      function mergeTaskEntities(localTask, remoteTask, fallbackActor){
+        const actor = normalizeActor(fallbackActor, clientId);
+        const left = localTask ? JSON.parse(JSON.stringify(localTask)) : null;
+        const right = remoteTask ? JSON.parse(JSON.stringify(remoteTask)) : null;
+        if(left){ ensureTaskStructure(left, actor); }
+        if(right){ ensureTaskStructure(right, actor); }
+        if(!left && !right){ return null; }
+        if(!left){ return right; }
+        if(!right){ return left; }
+        const useRemoteText = compareVersion(right.textUpdatedAt, right.textUpdatedBy, left.textUpdatedAt, left.textUpdatedBy) > 0;
+        const useRemoteDone = compareVersion(right.doneUpdatedAt, right.doneUpdatedBy, left.doneUpdatedAt, left.doneUpdatedBy) > 0;
+        const merged = {
+          id: left.id || right.id,
+          text: useRemoteText ? right.text : left.text,
+          done: useRemoteDone ? right.done : left.done,
+          createdAt: Math.min(normalizeTimestamp(left.createdAt, nowTs()), normalizeTimestamp(right.createdAt, nowTs())),
+          textUpdatedAt: useRemoteText ? right.textUpdatedAt : left.textUpdatedAt,
+          textUpdatedBy: useRemoteText ? right.textUpdatedBy : left.textUpdatedBy,
+          doneUpdatedAt: useRemoteDone ? right.doneUpdatedAt : left.doneUpdatedAt,
+          doneUpdatedBy: useRemoteDone ? right.doneUpdatedBy : left.doneUpdatedBy,
+          deletedAt: null,
+          deletedBy: '',
+          photos: []
+        };
+        const photoMap = Object.create(null);
+        (left.photos || []).forEach((photo)=>{ if(photo && photo.id){ photoMap[photo.id] = { local: photo, remote: null }; } });
+        (right.photos || []).forEach((photo)=>{
+          if(!photo || !photo.id){ return; }
+          if(!photoMap[photo.id]){ photoMap[photo.id] = { local: null, remote: photo }; }
+          else { photoMap[photo.id].remote = photo; }
+        });
+        Object.keys(photoMap).forEach((photoId)=>{
+          const mergedPhoto = mergePhotoEntities(photoMap[photoId].local, photoMap[photoId].remote, actor);
+          if(mergedPhoto){ merged.photos.push(mergedPhoto); }
+        });
+        const deleteWinner = compareVersion(right.deletedAt, right.deletedBy, left.deletedAt, left.deletedBy) > 0
+          ? { at: right.deletedAt, by: right.deletedBy }
+          : { at: left.deletedAt, by: left.deletedBy };
+        if(deleteWinner.at != null){
+          merged.deletedAt = deleteWinner.at;
+          merged.deletedBy = normalizeActor(deleteWinner.by, actor);
+        }
+        ensureTaskStructure(merged, actor);
+        return merged;
+      }
+
+      function normalizeIncomingTaskData(task){
+        const cloned = task ? JSON.parse(JSON.stringify(task)) : null;
+        if(!cloned){ return null; }
+        ensureTaskStructure(cloned, clientId);
+        return cloned;
+      }
+
+      function sortTasksForDisplay(list, tasks, remoteOrder){
+        const rank = getLocalOrderForList(list && list.id);
+        const existingOrder = Object.create(null);
+        (list && Array.isArray(list.tasks) ? list.tasks : []).forEach((task, idx)=>{
+          if(task && task.id){ existingOrder[task.id] = idx; }
+        });
+        const remoteRank = remoteOrder || Object.create(null);
+        return (tasks || []).slice().sort((a,b)=>{
+          const aDeleted = isTaskDeleted(a);
+          const bDeleted = isTaskDeleted(b);
+          if(aDeleted !== bDeleted){ return aDeleted ? 1 : -1; }
+          const rankA = Object.prototype.hasOwnProperty.call(rank, a.id) ? rank[a.id] : null;
+          const rankB = Object.prototype.hasOwnProperty.call(rank, b.id) ? rank[b.id] : null;
+          if(rankA != null && rankB != null){ return rankA - rankB; }
+          if(rankA != null){ return -1; }
+          if(rankB != null){ return 1; }
+          const existingA = Object.prototype.hasOwnProperty.call(existingOrder, a.id) ? existingOrder[a.id] : null;
+          const existingB = Object.prototype.hasOwnProperty.call(existingOrder, b.id) ? existingOrder[b.id] : null;
+          if(existingA != null && existingB != null){ return existingA - existingB; }
+          if(existingA != null){ return -1; }
+          if(existingB != null){ return 1; }
+          const remoteA = Object.prototype.hasOwnProperty.call(remoteRank, a.id) ? remoteRank[a.id] : null;
+          const remoteB = Object.prototype.hasOwnProperty.call(remoteRank, b.id) ? remoteRank[b.id] : null;
+          if(remoteA != null && remoteB != null){ return remoteA - remoteB; }
+          if(remoteA != null){ return -1; }
+          if(remoteB != null){ return 1; }
+          return compareVersion(a.createdAt, a.id, b.createdAt, b.id);
+        });
+      }
+
+      function mergeIncomingTasks(list, incomingTasks){
+        const localMap = Object.create(null);
+        const remoteMap = Object.create(null);
+        const remoteOrder = Object.create(null);
+        (Array.isArray(list && list.tasks) ? list.tasks : []).forEach((task)=>{
+          if(task && task.id){ localMap[task.id] = task; }
+        });
+        (incomingTasks || []).forEach((task, idx)=>{
+          if(!task || !task.id){ return; }
+          remoteMap[task.id] = task;
+          remoteOrder[task.id] = idx;
+        });
+        const ids = new Set([...Object.keys(localMap), ...Object.keys(remoteMap)]);
+        const merged = [];
+        ids.forEach((taskId)=>{
+          const mergedTask = mergeTaskEntities(localMap[taskId], remoteMap[taskId], (list && list.clientId) || clientId);
+          if(mergedTask){ merged.push(mergedTask); }
+        });
+        return sortTasksForDisplay(list, merged, remoteOrder);
+      }
+
+      function buildTaskRecordPatch(task){
+        ensureTaskStructure(task, clientId);
+        const base = `tasks/${task.id}`;
+        return {
+          [`${base}/id`]: task.id,
+          [`${base}/text`]: task.text,
+          [`${base}/done`]: !!task.done,
+          [`${base}/createdAt`]: task.createdAt,
+          [`${base}/updatedAt`]: task.updatedAt,
+          [`${base}/updatedBy`]: task.updatedBy,
+          [`${base}/deletedAt`]: task.deletedAt == null ? null : task.deletedAt,
+          [`${base}/deletedBy`]: task.deletedAt == null ? null : task.deletedBy || '',
+          [`${base}/textUpdatedAt`]: task.textUpdatedAt,
+          [`${base}/textUpdatedBy`]: task.textUpdatedBy,
+          [`${base}/doneUpdatedAt`]: task.doneUpdatedAt,
+          [`${base}/doneUpdatedBy`]: task.doneUpdatedBy,
+        };
+      }
+
+      function buildMetaPatch(list, includeTitle){
+        const patch = {
+          'meta/updatedAt': list.metaUpdatedAt,
+          'meta/updatedBy': list.metaUpdatedBy,
+          'meta/schemaVersion': SHARED_SCHEMA_VERSION
+        };
+        if(includeTitle !== false){
+          patch['meta/title'] = list.title;
+        }
+        return patch;
+      }
+
+      function buildTaskFieldPatch(list, task, kind){
+        ensureTaskStructure(task, list && list.clientId);
+        if(kind === 'text'){
+          return {
+            'meta/updatedAt': list.metaUpdatedAt,
+            'meta/updatedBy': list.metaUpdatedBy,
+            'meta/schemaVersion': SHARED_SCHEMA_VERSION,
+            [`tasks/${task.id}/text`]: task.text,
+            [`tasks/${task.id}/textUpdatedAt`]: task.textUpdatedAt,
+            [`tasks/${task.id}/textUpdatedBy`]: task.textUpdatedBy,
+            [`tasks/${task.id}/updatedAt`]: task.updatedAt,
+            [`tasks/${task.id}/updatedBy`]: task.updatedBy
+          };
+        }
+        if(kind === 'done'){
+          return {
+            'meta/updatedAt': list.metaUpdatedAt,
+            'meta/updatedBy': list.metaUpdatedBy,
+            'meta/schemaVersion': SHARED_SCHEMA_VERSION,
+            [`tasks/${task.id}/done`]: !!task.done,
+            [`tasks/${task.id}/doneUpdatedAt`]: task.doneUpdatedAt,
+            [`tasks/${task.id}/doneUpdatedBy`]: task.doneUpdatedBy,
+            [`tasks/${task.id}/updatedAt`]: task.updatedAt,
+            [`tasks/${task.id}/updatedBy`]: task.updatedBy
+          };
+        }
+        if(kind === 'delete'){
+          return {
+            'meta/updatedAt': list.metaUpdatedAt,
+            'meta/updatedBy': list.metaUpdatedBy,
+            'meta/schemaVersion': SHARED_SCHEMA_VERSION,
+            [`tasks/${task.id}/deletedAt`]: task.deletedAt,
+            [`tasks/${task.id}/deletedBy`]: task.deletedBy,
+            [`tasks/${task.id}/updatedAt`]: task.updatedAt,
+            [`tasks/${task.id}/updatedBy`]: task.updatedBy
+          };
+        }
+        return Object.assign({}, buildMetaPatch(list, false), buildTaskRecordPatch(task));
+      }
+
+      function buildPhotoPatch(list, task, photo){
+        ensureTaskStructure(task, list && list.clientId);
+        ensurePhotoStructure(photo, list && list.clientId);
+        return {
+          'meta/updatedAt': list.metaUpdatedAt,
+          'meta/updatedBy': list.metaUpdatedBy,
+          'meta/schemaVersion': SHARED_SCHEMA_VERSION,
+          [`tasks/${task.id}/updatedAt`]: task.updatedAt,
+          [`tasks/${task.id}/updatedBy`]: task.updatedBy,
+          [`tasks/${task.id}/photos/${photo.id}/id`]: photo.id,
+          [`tasks/${task.id}/photos/${photo.id}/dataUrl`]: photo.deletedAt == null ? photo.dataUrl : null,
+          [`tasks/${task.id}/photos/${photo.id}/createdAt`]: photo.createdAt,
+          [`tasks/${task.id}/photos/${photo.id}/updatedAt`]: photo.updatedAt,
+          [`tasks/${task.id}/photos/${photo.id}/updatedBy`]: photo.updatedBy,
+          [`tasks/${task.id}/photos/${photo.id}/deletedAt`]: photo.deletedAt == null ? null : photo.deletedAt,
+          [`tasks/${task.id}/photos/${photo.id}/deletedBy`]: photo.deletedAt == null ? null : photo.deletedBy || ''
+        };
+      }
+
+      function buildSyncPayload(list){
+        ensureListStructure(list);
+        return {
+          title: list.title,
+          updatedAt: list.metaUpdatedAt,
+          updatedBy: list.metaUpdatedBy,
+          metaUpdatedAt: list.metaUpdatedAt,
+          metaUpdatedBy: list.metaUpdatedBy,
+          clientId: list.clientId,
+          tasks: (list.tasks || []).map((task)=>{
+            ensureTaskStructure(task, list.clientId);
+            return JSON.parse(JSON.stringify(task));
+          })
+        };
+      }
+
+      function saveSyncOutboxState(){
+        try{
+          localStorage.setItem(SYNC_OUTBOX_STORAGE_KEY, JSON.stringify(syncOutboxByList || {}));
+        }catch(_){ }
+      }
+
+      function loadSyncOutboxState(){
+        try{
+          const raw = localStorage.getItem(SYNC_OUTBOX_STORAGE_KEY);
+          if(!raw){
+            syncOutboxByList = {};
+            return;
+          }
+          const parsed = JSON.parse(raw);
+          syncOutboxByList = (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+        }catch(_){
+          syncOutboxByList = {};
+        }
+      }
+
+      function getOutboxForList(listId, createIfMissing){
+        if(!listId){ return null; }
+        if(!syncOutboxByList || typeof syncOutboxByList !== 'object'){ syncOutboxByList = {}; }
+        if(!syncOutboxByList[listId]){
+          if(!createIfMissing){ return null; }
+          syncOutboxByList[listId] = [];
+        }
+        return syncOutboxByList[listId];
+      }
+
+      function cleanupOutbox(listId){
+        if(!listId || !syncOutboxByList || !Object.prototype.hasOwnProperty.call(syncOutboxByList, listId)){ return; }
+        const queue = syncOutboxByList[listId];
+        if(!Array.isArray(queue) || queue.length===0){
+          delete syncOutboxByList[listId];
+          saveSyncOutboxState();
+        }
+      }
+
+      function enqueueSyncOperation(list, patch, targets){
+        if(!list || !patch || typeof patch !== 'object'){ return; }
+        const code = String(list.shareCode || '').replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0, 6);
+        if(code.length !== 6){ return; }
+        const queue = getOutboxForList(list.id, true);
+        queue.push({
+          id: 'op_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2, 7),
+          code,
+          patch,
+          targets: Array.isArray(targets) ? targets : [],
+          sentAt: 0
+        });
+        saveSyncOutboxState();
+      }
+
+      function isTargetAcknowledged(target, remote){
+        if(!target || !remote){ return false; }
+        if(target.kind === 'meta'){
+          return compareVersion(remote.updatedAt, remote.updatedBy, target.at, target.by) >= 0;
+        }
+        const remoteTask = Array.isArray(remote.tasks) ? remote.tasks.find((task)=> task && task.id===target.taskId) : null;
+        if(!remoteTask){ return false; }
+        if(target.kind === 'task_create'){
+          return compareVersion(remoteTask.updatedAt, remoteTask.updatedBy, target.at, target.by) >= 0;
+        }
+        if(target.kind === 'task_text'){
+          if(remoteTask.deletedAt != null && compareVersion(remoteTask.deletedAt, remoteTask.deletedBy, target.at, target.by) >= 0){ return true; }
+          return compareVersion(remoteTask.textUpdatedAt, remoteTask.textUpdatedBy, target.at, target.by) >= 0;
+        }
+        if(target.kind === 'task_done'){
+          if(remoteTask.deletedAt != null && compareVersion(remoteTask.deletedAt, remoteTask.deletedBy, target.at, target.by) >= 0){ return true; }
+          return compareVersion(remoteTask.doneUpdatedAt, remoteTask.doneUpdatedBy, target.at, target.by) >= 0;
+        }
+        if(target.kind === 'task_delete'){
+          return remoteTask.deletedAt != null && compareVersion(remoteTask.deletedAt, remoteTask.deletedBy, target.at, target.by) >= 0;
+        }
+        const remotePhoto = Array.isArray(remoteTask.photos) ? remoteTask.photos.find((photo)=> photo && photo.id===target.photoId) : null;
+        if(target.kind === 'photo_upsert'){
+          if(remoteTask.deletedAt != null && compareVersion(remoteTask.deletedAt, remoteTask.deletedBy, target.at, target.by) >= 0){ return true; }
+          return !!(remotePhoto && compareVersion(remotePhoto.updatedAt, remotePhoto.updatedBy, target.at, target.by) >= 0);
+        }
+        if(target.kind === 'photo_delete'){
+          if(remoteTask.deletedAt != null && compareVersion(remoteTask.deletedAt, remoteTask.deletedBy, target.at, target.by) >= 0){ return true; }
+          return !!(remotePhoto && remotePhoto.deletedAt != null && compareVersion(remotePhoto.deletedAt, remotePhoto.deletedBy, target.at, target.by) >= 0);
+        }
+        return false;
+      }
+
+      function acknowledgeOutboxWithRemote(list, remote){
+        if(!list || !remote){ return; }
+        const queue = getOutboxForList(list.id, false);
+        if(!Array.isArray(queue) || !queue.length){ return; }
+        const remaining = queue.filter((entry)=>{
+          const targets = Array.isArray(entry.targets) ? entry.targets : [];
+          if(!targets.length){ return false; }
+          return !targets.every((target)=> isTargetAcknowledged(target, remote));
+        });
+        if(remaining.length !== queue.length){
+          syncOutboxByList[list.id] = remaining;
+          saveSyncOutboxState();
+          cleanupOutbox(list.id);
+        }
+      }
+
+      function canSyncList(list){
+        if(!list) return false;
+        const code = String(list.shareCode||'').replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
+        if(!code || code.length!==6) return false;
+        if(typeof window === 'undefined' || typeof window.firebaseApplyListPatch !== 'function'){ return false; }
+        if(list.imported){ return true; }
+        return !!list.shareCreated;
+      }
+
+      async function flushListOutbox(listId){
+        const queue = getOutboxForList(listId, false);
+        const list = lists.find((entry)=> entry && entry.id===listId);
+        if(!list || !canSyncList(list) || !Array.isArray(queue) || !queue.length){ return; }
+        if(syncFlushes[listId]){ return syncFlushes[listId]; }
+        const code = String(list.shareCode||'').replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
+        syncFlushes[listId] = (async ()=>{
+          try{
+            for(const entry of queue){
+              if(!entry || !entry.patch){ continue; }
+              if(entry.sentAt && (Date.now() - entry.sentAt) < 600){ continue; }
+              try{
+                await window.firebaseApplyListPatch(code, entry.patch);
+                entry.sentAt = Date.now();
+                saveSyncOutboxState();
+              }catch(_){
+                break;
+              }
+            }
+          }finally{
+            delete syncFlushes[listId];
+          }
+        })();
+        return syncFlushes[listId];
+      }
+
+      function requestSync(listId, delayMs){
+        try{
+          const list = lists.find((entry)=> entry && entry.id===listId);
+          if(!list || !canSyncList(list)) return;
+          const wait = typeof delayMs === 'number' ? Math.max(0, delayMs) : 180;
+          if(syncTimers[listId]){ clearTimeout(syncTimers[listId]); }
+          syncTimers[listId] = setTimeout(async ()=>{
+            try{
+              await flushListOutbox(listId);
+            }catch(_){ }
+            finally{
+              syncTimers[listId] = null;
+            }
+          }, wait);
+        }catch(_){ }
+      }
+
+      function startRealtimeForList(listId){
+        try{
+          const list = lists.find((entry)=> entry && entry.id===listId);
+          if(!list) return;
+          const code = String(list.shareCode||'').replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
+          if(!code || code.length!==6) return;
+          const subscribeFn = (typeof window !== 'undefined') ? window.firebaseSubscribe : null;
+          if(typeof subscribeFn !== 'function'){
+            if(!realtimeRetryTimers[listId]){
+              realtimeRetryTimers[listId] = setTimeout(()=>{
+                realtimeRetryTimers[listId] = null;
+                startRealtimeForList(listId);
+              }, 180);
+            }
+            return;
+          }
+          if(liveSubscriptions[listId]) return;
+          subscribeFn(code, (remote)=>{
+            if(!remote){ return; }
+            ensureListStructure(list);
+            list.shareCreated = true;
+            if(compareVersion(remote.updatedAt, remote.updatedBy, list.metaUpdatedAt, list.metaUpdatedBy) > 0){
+              list.title = remote.title || list.title || 'Lista';
+              list.metaUpdatedAt = normalizeTimestamp(remote.updatedAt, list.metaUpdatedAt);
+              list.metaUpdatedBy = normalizeActor(remote.updatedBy, list.metaUpdatedBy);
+            }
+            const incoming = Array.isArray(remote.tasks)
+              ? remote.tasks.map((task)=> normalizeIncomingTaskData(task)).filter(Boolean)
+              : [];
+            list.tasks = mergeIncomingTasks(list, incoming);
+            acknowledgeOutboxWithRemote(list, remote);
+            updateLocalOrderForList(list.id);
+            saveState();
+            renderLists();
+            if(currentListId === list.id){
+              currentListName.textContent = list.title;
+              renderTasks();
+              const activeScreen = [screenTaskDetail, screenListDetail, screenLists]
+                .find((screen)=>screen && screen.classList && screen.classList.contains('active'))
+                || screenLists;
+              updateAppBar(activeScreen);
+            }
+            requestSync(list.id, 220);
+          });
+          liveSubscriptions[listId] = code;
+          if(realtimeRetryTimers[listId]){
+            clearTimeout(realtimeRetryTimers[listId]);
+            delete realtimeRetryTimers[listId];
+          }
+          requestSync(listId, 320);
+        }catch(_){ }
+      }
+
+      function stopRealtimeForList(listId){
+        try{
+          const code = liveSubscriptions[listId];
+          if(!code) return;
+          if(window && typeof window.firebaseUnsubscribe === 'function'){
+            window.firebaseUnsubscribe(code);
+          }
+          delete liveSubscriptions[listId];
+          if(realtimeRetryTimers[listId]){
+            clearTimeout(realtimeRetryTimers[listId]);
+            delete realtimeRetryTimers[listId];
+          }
+        }catch(_){ }
+      }
+
+      function startRealtimeForExistingLists(){
+        try{
+          (lists||[]).forEach((list)=>{
+            if(!list) return;
+            const normalized = String(list.shareCode||'').replace(/[^0-9A-Z]/gi,'').toUpperCase();
+            if(normalized.length===6){
+              startRealtimeForList(list.id);
+            }
+          });
+        }catch(_){ }
+      }
+
+      function ensureListsStructure(){
+        if(!Array.isArray(lists)){ lists = []; return; }
+        lists.forEach((list)=> ensureListStructure(list));
+      }
+
+      function saveState(){
+        ensureListsStructure();
+        localStorage.setItem(LIST_STORAGE_KEY, JSON.stringify(lists));
+        saveSyncOutboxState();
+      }
+
+      function loadState(){
+        try{
+          const raw = localStorage.getItem(LIST_STORAGE_KEY) || localStorage.getItem(LEGACY_LIST_STORAGE_KEY);
+          if(raw){
+            const parsed = JSON.parse(raw);
+            lists = Array.isArray(parsed) ? parsed : [];
+          }
+        }catch(_){
+          lists = [];
+        }
+        loadSyncOutboxState();
+        ensureListsStructure();
+      }
+
+      function loadLocalOrderState(){
+        try{
+          const raw = localStorage.getItem(LOCAL_ORDER_STORAGE_KEY) || localStorage.getItem(LEGACY_LOCAL_ORDER_STORAGE_KEY);
+          localOrderByList = raw ? (JSON.parse(raw) || {}) : {};
+          if(typeof localOrderByList !== 'object' || Array.isArray(localOrderByList)){
+            localOrderByList = {};
+          }
+        }catch(_){
+          localOrderByList = {};
+        }
+      }
+
+      function getLocalOrderForList(listId){
+        if(!listId) return {};
+        const map = localOrderByList[listId];
+        return (map && typeof map === 'object' && !Array.isArray(map)) ? map : {};
+      }
+
+      function setLocalOrderForList(listId, map){
+        if(!listId) return;
+        if(!localOrderByList || typeof localOrderByList !== 'object'){ localOrderByList = {}; }
+        localOrderByList[listId] = map || {};
+        saveLocalOrderState();
+      }
+
+      function removeLocalOrderState(listId){
+        if(!listId) return;
+        if(localOrderByList && Object.prototype.hasOwnProperty.call(localOrderByList, listId)){
+          delete localOrderByList[listId];
+          saveLocalOrderState();
+        }
+      }
+
+      function updateLocalOrderForList(listId){
+        const list = lists.find((entry)=> entry && entry.id===listId);
+        if(!list) return;
+        const map = {};
+        let rank = 1;
+        getVisibleTasks(list).forEach((task)=>{
+          map[task.id] = rank++;
+        });
+        setLocalOrderForList(listId, map);
+      }
+
+      function rebuildTaskArrayAfterReorder(list, orderedVisibleTasks){
+        if(!list){ return; }
+        const visible = Array.isArray(orderedVisibleTasks) ? orderedVisibleTasks.filter(Boolean) : [];
+        const doneTasks = visible.filter((task)=> !!task.done);
+        const activeTasks = visible.filter((task)=> !task.done);
+        const deletedTasks = Array.isArray(list.tasks) ? list.tasks.filter((task)=> isTaskDeleted(task)) : [];
+        list.tasks = [...activeTasks, ...doneTasks, ...deletedTasks];
+      }
+
       function hideAppMenu(){
         if(!isMenuOpen) return;
         appMenu.hidden = true;
@@ -1610,6 +2427,36 @@
         return sanitized.slice(0,3)+' '+sanitized.slice(3);
       }
 
+      function setShareDialogStatus(message, isError){
+        if(!shareCopyFeedback){ return; }
+        shareCopyFeedback.textContent = message || '';
+        shareCopyFeedback.classList.toggle('error', !!isError);
+      }
+
+      async function runInitialShareSync(list, options){
+        const opts = Object.assign({ showSuccess:false }, options||{});
+        if(!list || typeof window === 'undefined' || typeof window.firebaseShareList !== 'function'){ return false; }
+        try{
+          setShareDialogStatus('Compartilhando lista...', false);
+          if(shareRetryBtn){ shareRetryBtn.hidden = true; }
+          await window.firebaseShareList(activeShareCode, buildSyncPayload(list));
+          list.shareCreated = true;
+          saveState();
+          if(opts.showSuccess){
+            setShareDialogStatus('Lista compartilhada com sucesso!', false);
+          } else {
+            setShareDialogStatus('', false);
+          }
+          requestSync(list.id, 220);
+          return true;
+        }catch(error){
+          console.error('Erro ao compartilhar:', error);
+          setShareDialogStatus('Erro ao compartilhar a lista. Tente novamente.', true);
+          if(shareRetryBtn){ shareRetryBtn.hidden = false; }
+          return false;
+        }
+      }
+
       async function openShareDialog(){
         if(!currentListId) return;
         const list = lists.find(x=>x.id===currentListId);
@@ -1618,47 +2465,32 @@
         
         if(list && list.shareCode){
           activeShareCode = String(list.shareCode).replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
+          if(!list.shareCreated){ needsSharing = true; }
         } else {
           activeShareCode = generateShareCode();
-          if(list){ list.shareCode = activeShareCode; saveState(); }
+          if(list){ list.shareCode = activeShareCode; list.shareCreated = false; saveState(); }
           needsSharing = true;
-          if(list){ startRealtimeForList(list.id); }
-        }
-        
-        // Compartilhar com Firebase ao abrir o modal
-        if(needsSharing && list && typeof window !== 'undefined' && typeof window.firebaseShareList === 'function'){
-          try {
-            shareCopyFeedback.textContent='Compartilhando lista...';
-            shareCopyFeedback.classList.remove('error');
-            await window.firebaseShareList(activeShareCode, { title: list.title, tasks: list.tasks });
-            list.shareCreated = true;
-            saveState();
-            shareCopyFeedback.textContent='Lista compartilhada com sucesso!';
-          } catch(err) {
-            // Falha ao compartilhar, mas continua mostrando o diálogo
-            console.error('Erro ao compartilhar:', err);
-            shareCopyFeedback.textContent='Erro ao compartilhar a lista';
-            shareCopyFeedback.classList.add('error');
-          }
         }
         
         shareCodeValue.textContent = formatDisplayCode(activeShareCode);
-        if(!shareCopyFeedback.textContent) {
-          shareCopyFeedback.textContent='';
-          shareCopyFeedback.classList.remove('error');
-        }
+        setShareDialogStatus('', false);
+        if(shareRetryBtn){ shareRetryBtn.hidden = true; }
         shareBackdrop.style.display='flex';
         shareBackdrop.classList.add('show');
         lockScroll();
         applyKeyboardInset();
         shareCopyBtn.focus();
+        if(list){ startRealtimeForList(list.id); }
+        if(needsSharing && list){
+          runInitialShareSync(list, { showSuccess:true });
+        }
       }
 
       function closeShareDialog(){
         shareBackdrop.classList.remove('show');
         shareBackdrop.style.display='none';
-        shareCopyFeedback.textContent='';
-        shareCopyFeedback.classList.remove('error');
+        setShareDialogStatus('', false);
+        if(shareRetryBtn){ shareRetryBtn.hidden = true; }
         activeShareCode='';
         if(copyFeedbackTimer){ clearTimeout(copyFeedbackTimer); copyFeedbackTimer=null; }
         clearKeyboardInset();
@@ -1804,7 +2636,7 @@
           ico.appendChild(createListIconSvg());
           const txt = document.createElement('div'); txt.className='list-title'; txt.textContent=l.title;
           const incompleteCount = Array.isArray(l.tasks)
-            ? l.tasks.reduce((total, task)=> total + (task && task.done ? 0 : 1), 0)
+            ? l.tasks.reduce((total, task)=> total + (task && !isTaskDeleted(task) && !task.done ? 1 : 0), 0)
             : 0;
 
           card.appendChild(ico);
@@ -1930,14 +2762,24 @@
       function createListFromModal(){
         const title = listNameInput.value.trim(); if(!title) return;
         const id = 'l_'+Date.now();
-        const newList = {id, title, tasks:[]};
+        const ts = nowTs();
+        const newList = { id, title, tasks:[], createdAt: ts, metaUpdatedAt: ts, metaUpdatedBy: clientId, clientId, shareCreated:false };
+        ensureListStructure(newList);
         lists.push(newList);
         saveState(); renderLists(); closeModal(); openList(id);
       }
 
       function saveRenameFromModal(){
         const id = modalBackdrop.dataset.listId; const title = listNameInput.value.trim(); if(!title) return;
-        const list = lists.find(x=>x.id===id); if(list){ list.title = title; }
+        const list = lists.find(x=>x.id===id);
+        if(list){
+          const ts = nowTs();
+          list.title = title;
+          touchListMeta(list, ts, clientId);
+          enqueueSyncOperation(list, buildMetaPatch(list, true), [
+            { kind:'meta', at: list.metaUpdatedAt, by: list.metaUpdatedBy }
+          ]);
+        }
         saveState(); renderLists(); if(currentListId===id){ currentListName.textContent = title; }
         if(list){ requestSync(list.id); }
         closeModal();
@@ -1962,7 +2804,7 @@
         currentTaskId = taskId;
         const list = lists.find(x=>x.id===currentListId);
         if(!list) return;
-        const task = list.tasks.find(t=>t.id===taskId);
+        const task = findTaskById(list, taskId, false);
         if(!task) return;
         ensureTaskStructure(task);
         renderTaskPhotos(task);
@@ -2097,8 +2939,9 @@
         const list = lists.find(x=>x.id===currentListId);
         if(!list) return;
         completedCollapsed = getCompletedCollapseForList(list.id);
-        const active = list.tasks.filter(t=>!t.done);
-        const done = list.tasks.filter(t=>t.done);
+        const visibleTasks = getVisibleTasks(list);
+        const active = visibleTasks.filter(t=>!t.done);
+        const done = visibleTasks.filter(t=>t.done);
 
         // Carregar grupos locais da lista
         const groups = loadLocalGroups(currentListId);
@@ -2127,7 +2970,7 @@
         initSortableTasks();
 
         if(currentTaskId && screenTaskDetail.classList.contains('active')){
-          const currentTask = list.tasks.find((t)=>t && t.id===currentTaskId);
+          const currentTask = findTaskById(list, currentTaskId, false);
           if(currentTask){
             ensureTaskStructure(currentTask);
             renderTaskPhotos(currentTask);
@@ -2152,24 +2995,28 @@
 
       function toggleTaskDone(taskId, markDone){
         const list = lists.find(x=>x.id===currentListId); if(!list) return;
-        const idx = list.tasks.findIndex(t=>t.id===taskId); if(idx===-1) return;
+        const task = findTaskById(list, taskId, false); if(!task) return;
+        const ts = nowTs();
+        touchListMeta(list, ts, clientId);
         
         // Obter listas separadas de tarefas ativas e concluídas (excluindo a tarefa atual)
-        const activeTasks = list.tasks.filter(t => !t.done && t.id !== taskId);
-        const doneTasks = list.tasks.filter(t => t.done && t.id !== taskId);
-        
-        // Atualizar o status da tarefa
-        const task = list.tasks[idx];
-        task.done = !!markDone;
+        const visibleTasks = getVisibleTasks(list);
+        const activeTasks = visibleTasks.filter(t => !t.done && t.id !== taskId);
+        const doneTasks = visibleTasks.filter(t => t.done && t.id !== taskId);
+        const deletedTasks = (list.tasks || []).filter((entry)=> isTaskDeleted(entry));
+        setTaskDoneCommit(task, !!markDone, ts, clientId);
         
         // Reorganizar as tarefas mantendo a ordem personalizada
         if(task.done) {
           // Se foi marcada como concluída, adicionar ao início das concluídas
-          list.tasks = [...activeTasks, task, ...doneTasks];
+          list.tasks = [...activeTasks, task, ...doneTasks, ...deletedTasks];
         } else {
           // Se foi marcada como ativa, adicionar ao início das ativas
-          list.tasks = [task, ...activeTasks, ...doneTasks];
+          list.tasks = [task, ...activeTasks, ...doneTasks, ...deletedTasks];
         }
+        enqueueSyncOperation(list, buildTaskFieldPatch(list, task, 'done'), [
+          { kind:'task_done', taskId: task.id, at: task.doneUpdatedAt, by: task.doneUpdatedBy }
+        ]);
         updateLocalOrderForList(list.id);
         saveState();
         renderTasks();
@@ -2188,13 +3035,25 @@
 
       function deleteTask(taskId){
         const list = lists.find(x=>x.id===currentListId); if(!list) return;
-        const idx = list.tasks.findIndex(t=>t.id===taskId); if(idx===-1) return;
+        const task = findTaskById(list, taskId, false); if(!task) return;
         clearPendingPhotos(list.id, taskId);
         
         // Limpar grupos ao excluir tarefa
         cleanupGroupsForTask(list.id, taskId);
         
-        list.tasks.splice(idx,1);
+        const ts = nowTs();
+        touchListMeta(list, ts, clientId);
+        markTaskDeleted(task, ts, clientId);
+        enqueueSyncOperation(list, buildTaskFieldPatch(list, task, 'delete'), [
+          { kind:'task_delete', taskId: task.id, at: task.deletedAt, by: task.deletedBy }
+        ]);
+        if(currentTaskId===taskId){
+          currentTaskId = null;
+          closePhotoLightbox({ skipPersist:true });
+          currentListName.textContent = list.title;
+          showScreen(screenListDetail);
+          replaceHistoryState(SCREEN_KEYS.LIST_DETAIL, { listId: list.id });
+        }
         updateLocalOrderForList(list.id);
         saveState(); renderTasks(); renderLists(); requestSync(list.id);
       }
@@ -2315,8 +3174,15 @@
       function sendTaskNow(){
         const text = composerInput.value.trim(); if(!text) return;
         const list = lists.find(x=>x.id===currentListId); if(!list) return;
+        const ts = nowTs();
+        touchListMeta(list, ts, clientId);
         // add to top of active tasks
-        list.tasks.unshift({id:'t_'+Date.now(), text, done:false, photos:[]});
+        const newTask = { id:createTaskId(), text, done:false, photos:[], createdAt: ts };
+        ensureTaskStructure(newTask, clientId);
+        list.tasks = [newTask, ...getVisibleTasks(list), ...(list.tasks || []).filter((entry)=> isTaskDeleted(entry))];
+        enqueueSyncOperation(list, Object.assign({}, buildMetaPatch(list, false), buildTaskRecordPatch(newTask)), [
+          { kind:'task_create', taskId: newTask.id, at: newTask.updatedAt, by: newTask.updatedBy }
+        ]);
         updateLocalOrderForList(list.id);
         composerInput.value=''; sendTask.disabled=true; saveState(); renderTasks(); renderLists();
         requestSync(list.id);
@@ -2328,7 +3194,7 @@
       taskDetailText.addEventListener('input', ()=>{
         if(!currentListId || !currentTaskId) return;
         const list = lists.find(x=>x.id===currentListId); if(!list) return;
-        const task = list.tasks.find(t=>t.id===currentTaskId); if(!task) return;
+        const task = findTaskById(list, currentTaskId, false); if(!task) return;
         const raw = taskDetailText.textContent || '';
         const trimmed = raw.trim();
         if(trimmed.length===0){
@@ -2343,7 +3209,7 @@
         try{
           if(!currentListId || !currentTaskId) return;
           const list = lists.find(x=>x.id===currentListId); if(!list) return;
-          const task = list.tasks.find(t=>t.id===currentTaskId); if(!task) return;
+          const task = findTaskById(list, currentTaskId, false); if(!task) return;
           // snapshot do valor no momento do foco
           lastValidTaskText = task.text || '';
         }catch(_){ }
@@ -2353,15 +3219,20 @@
         // não permitir salvar vazio; restaurar último título válido
         if(!currentListId || !currentTaskId) return;
         const list = lists.find(x=>x.id===currentListId); if(!list) return;
-        const task = list.tasks.find(t=>t.id===currentTaskId); if(!task) return;
+        const task = findTaskById(list, currentTaskId, false); if(!task) return;
         const trimmed = (taskDetailText.textContent || '').trim();
+        const ts = nowTs();
         if(trimmed.length===0){
-          task.text = lastValidTaskText || '';
+          setTaskTextCommit(task, lastValidTaskText || '', ts, clientId);
           taskDetailText.textContent = lastValidTaskText || '';
         } else {
-          task.text = taskDetailText.textContent;
+          setTaskTextCommit(task, taskDetailText.textContent, ts, clientId);
           lastValidTaskText = task.text;
         }
+        touchListMeta(list, ts, clientId);
+        enqueueSyncOperation(list, buildTaskFieldPatch(list, task, 'text'), [
+          { kind:'task_text', taskId: task.id, at: task.textUpdatedAt, by: task.textUpdatedBy }
+        ]);
         updateLocalOrderForList(list.id);
         saveState(); renderLists(); renderTasks(); requestSync(list.id);
       });
@@ -2370,7 +3241,7 @@
       taskDetailCheckbox.addEventListener('click', ()=>{
         if(!currentTaskId || !currentListId) return;
         const list = lists.find(x=>x.id===currentListId); if(!list) return;
-        const task = list.tasks.find(t=>t.id===currentTaskId); if(!task) return;
+        const task = findTaskById(list, currentTaskId, false); if(!task) return;
         const newDone = !task.done;
         // animate
         taskDetailCheckbox.classList.add('pop');
@@ -2395,6 +3266,21 @@
       if(photoLightboxDelete){
         photoLightboxDelete.addEventListener('click', ()=> deleteActivePhoto());
       }
+      if(taskDeleteButton){
+        taskDeleteButton.addEventListener('click', async ()=>{
+          if(!currentTaskId || !currentListId) return;
+          const list = lists.find((entry)=> entry && entry.id===currentListId);
+          const task = list ? findTaskById(list, currentTaskId, false) : null;
+          if(!task) return;
+          const ok = await showConfirmDialog({
+            title: 'Excluir tarefa',
+            message: `Excluir "${task.text || 'esta tarefa'}"? Essa ação não pode ser desfeita.`,
+            confirmText: 'Excluir',
+            cancelText: 'Cancelar'
+          });
+          if(ok){ deleteTask(task.id); }
+        });
+      }
 
       async function deleteCurrentList(){
         if(!currentListId) return;
@@ -2418,6 +3304,10 @@
         // exclusão local
         stopRealtimeForList(list.id);
         removeLocalOrderState(list && list.id);
+        if(syncOutboxByList && Object.prototype.hasOwnProperty.call(syncOutboxByList, list.id)){
+          delete syncOutboxByList[list.id];
+          saveSyncOutboxState();
+        }
         lists.splice(idx,1);
         saveState();
         currentTaskId = null;
@@ -2496,6 +3386,12 @@
         });
       }
       shareCopyBtn.addEventListener('click', attemptCopyShareCode);
+      if(shareRetryBtn){
+        shareRetryBtn.addEventListener('click', ()=>{
+          const list = lists.find((entry)=> entry && entry.id===currentListId);
+          if(list){ runInitialShareSync(list, { showSuccess:true }); }
+        });
+      }
       shareCloseBtn.addEventListener('click', closeShareDialog);
       shareBackdrop.addEventListener('click', (evt)=>{ if(evt.target===shareBackdrop) closeShareDialog(); });
       // code modal bindings
@@ -2532,20 +3428,26 @@
             const title = remote.title || 'Lista Importada';
             const tasks = [];
             if(Array.isArray(remote.tasks)){
-              const baseTs = Date.now();
-              remote.tasks.forEach((t, idx)=>{
+              remote.tasks.forEach((t)=>{
                 const normalizedTask = normalizeIncomingTaskData(t);
-                const task = {
-                  id: 't_'+baseTs+'_'+idx,
-                  text: normalizedTask.text,
-                  done: normalizedTask.done,
-                  photos: normalizedTask.photos
-                };
+                const task = normalizedTask ? JSON.parse(JSON.stringify(normalizedTask)) : null;
+                if(!task){ return; }
                 ensureTaskStructure(task);
                 tasks.push(task);
               });
             }
-            const newList = { id, title, tasks, shareCode: normalized, imported: true };
+            const newList = {
+              id,
+              title,
+              tasks,
+              shareCode: normalized,
+              imported: true,
+              shareCreated: true,
+              metaUpdatedAt: normalizeTimestamp(remote.updatedAt, nowTs()),
+              metaUpdatedBy: normalizeActor(remote.updatedBy, clientId),
+              clientId
+            };
+            ensureListStructure(newList);
             lists.push(newList);
             saveState(); renderLists(); closeCodeModal(); openList(id);
             startRealtimeForList(id);
@@ -2888,17 +3790,17 @@
                   // Reorganizar tarefas ativas
                   const taskElements = Array.from(tasksContainer.querySelectorAll('.task'));
                   const activeTasks = [];
-                  const doneTasks = list.tasks.filter(t => t.done);
+                  const visibleTasks = getVisibleTasks(list);
                   
                   taskElements.forEach(el => {
                     const id = el.dataset.id;
-                    const task = list.tasks.find(t => t.id === id);
+                    const task = visibleTasks.find(t => t.id === id);
                     if (task) {
                       activeTasks.push(task);
                     }
                   });
                   
-                  list.tasks = [...activeTasks, ...doneTasks];
+                  rebuildTaskArrayAfterReorder(list, [...activeTasks, ...visibleTasks.filter((task)=> task.done)]);
                   updateLocalOrderForList(list.id);
                   saveState();
                   requestSync(list.id);
@@ -2980,18 +3882,19 @@
                   
                   // Reorganizar tarefas concluídas
                   const taskElements = Array.from(completedList.querySelectorAll('.task'));
-                  const activeTasks = list.tasks.filter(t => !t.done);
+                  const visibleTasks = getVisibleTasks(list);
+                  const activeTasks = visibleTasks.filter(t => !t.done);
                   const doneTasks = [];
                   
                   taskElements.forEach(el => {
                     const id = el.dataset.id;
-                    const task = list.tasks.find(t => t.id === id);
+                    const task = visibleTasks.find(t => t.id === id);
                     if (task) {
                       doneTasks.push(task);
                     }
                   });
                   
-                  list.tasks = [...activeTasks, ...doneTasks];
+                  rebuildTaskArrayAfterReorder(list, [...activeTasks, ...doneTasks]);
                   updateLocalOrderForList(list.id);
                   saveState();
                   requestSync(list.id);
@@ -3119,19 +4022,18 @@
                     // Reorganizar tarefas conforme necessário
                     const allTaskElements = Array.from(document.querySelectorAll('#tasksContainer .task, #completedList .task'));
                     const reorderedTasks = [];
-                    const doneTasks = list.tasks.filter(t => t.done);
-                    const activeTasks = list.tasks.filter(t => !t.done);
+                    const visibleTasks = getVisibleTasks(list);
                     
                     // Usar ordem existente como base
                     allTaskElements.forEach(el => {
                       const id = el.dataset.id;
-                      const task = list.tasks.find(t => t.id === id);
+                      const task = visibleTasks.find(t => t.id === id);
                       if (task && !task.done && !reorderedTasks.includes(task)) {
                         reorderedTasks.push(task);
                       }
                     });
                     
-                    list.tasks = [...reorderedTasks, ...doneTasks];
+                    rebuildTaskArrayAfterReorder(list, [...reorderedTasks, ...visibleTasks.filter((task)=> task.done)]);
                     updateLocalOrderForList(list.id);
                     saveState();
                     requestSync(list.id);

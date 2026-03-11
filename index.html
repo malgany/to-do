@@ -124,6 +124,7 @@
         </section>
 
         <div class="task-media-footer" role="group" aria-label="Opções de foto">
+          <button id="taskDeleteButton" class="btn danger task-delete-action" type="button">Excluir tarefa</button>
           <button class="btn primary photo-action" type="button">
             <span class="photo-action-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
@@ -195,6 +196,7 @@
           </button>
         </div>
         <div id="shareCopyFeedback" class="share-feedback" role="status" aria-live="polite"></div>
+        <button id="shareRetryBtn" class="btn" type="button" hidden>Tentar novamente</button>
         <button id="shareCloseBtn" class="btn share-close" type="button">Fechar</button>
       </div>
     </div>
@@ -230,7 +232,7 @@
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
     import { initializeAppCheck, ReCaptchaV3Provider } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app-check.js';
-    import { getDatabase, ref, set, get, child, remove, onValue, off } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
+    import { getDatabase, ref, set, get, child, remove, onValue, off, update } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
 
     const firebaseConfig = {
       apiKey: "AIzaSyBH0WJNRyphdJQ1ydwgh1GYLnOS00wt4oM",
@@ -257,6 +259,9 @@
     const MAX_SHARED_PHOTOS = 4;
     const MAX_SHARED_PHOTO_DATA_LENGTH = 400000; // ~400 KB
     const MAX_SHARED_PAYLOAD_SIZE = 7 * 1024 * 1024; // 7 MB
+    const SHARED_SCHEMA_VERSION = 2;
+    const SHARED_LISTS_ROOT = 'sharedLists';
+    const migratingLegacyCodes = new Set();
 
     function normalizeShareCode(code){
       try{
@@ -443,17 +448,401 @@
       }
     }
 
-    window.firebaseShareList = shareListToFirebase;
-    window.firebaseGetList = getListFromFirebase;
-    window.firebaseDeleteList = deleteListFromFirebase;
-    window.firebaseSubscribe = subscribeToList;
-    window.firebaseUnsubscribe = unsubscribeFromList;
+    function createSharedEntityId(prefix){
+      return prefix+'_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2, 8);
+    }
+
+    function createSharedTaskId(){
+      return createSharedEntityId('t');
+    }
+
+    function toFiniteNumber(value, fallback){
+      const num = Number(value);
+      return Number.isFinite(num) ? num : fallback;
+    }
+
+    function normalizeActor(value, fallback){
+      try{
+        const normalized = String(value || '').trim().slice(0, 96);
+        return normalized || String(fallback || '').trim().slice(0, 96) || 'remote';
+      }catch(_){
+        return String(fallback || 'remote');
+      }
+    }
+
+    function compareVersion(aAt, aBy, bAt, bBy){
+      const at = toFiniteNumber(aAt, 0);
+      const bt = toFiniteNumber(bAt, 0);
+      if(at !== bt){ return at - bt; }
+      const actorA = String(aBy || '');
+      const actorB = String(bBy || '');
+      if(actorA === actorB){ return 0; }
+      return actorA > actorB ? 1 : -1;
+    }
+
+    function pickLatestVersion(entries, fallback){
+      let winner = {
+        at: toFiniteNumber(fallback && fallback.at, Date.now()),
+        by: normalizeActor(fallback && fallback.by, 'remote')
+      };
+      (entries || []).forEach((entry)=>{
+        if(!entry){ return; }
+        const at = toFiniteNumber(entry.at, 0);
+        const by = normalizeActor(entry.by, winner.by);
+        if(compareVersion(at, by, winner.at, winner.by) > 0){
+          winner = { at, by };
+        }
+      });
+      return winner;
+    }
+
+    function buildSharedMeta(list, fallbackUpdatedBy){
+      const fallbackBy = normalizeActor(fallbackUpdatedBy, 'remote');
+      return {
+        title: list && typeof list.title === 'string' ? list.title : 'Lista',
+        updatedAt: Math.max(Date.now(), toFiniteNumber(list && (list.metaUpdatedAt ?? list.updatedAt), Date.now())),
+        updatedBy: normalizeActor(list && (list.metaUpdatedBy || list.updatedBy), fallbackBy),
+        schemaVersion: SHARED_SCHEMA_VERSION
+      };
+    }
+
+    function sanitizeSharedPhotoV2(photo, seenIds, fallbackUpdatedBy){
+      if(!photo || typeof photo !== 'object') return null;
+      const now = Date.now();
+      const deletedAt = photo.deletedAt == null ? null : toFiniteNumber(photo.deletedAt, null);
+      const rawDataUrl = typeof photo.dataUrl === 'string' ? photo.dataUrl.trim() : '';
+      if(deletedAt == null && (!rawDataUrl || rawDataUrl.length > MAX_SHARED_PHOTO_DATA_LENGTH)){
+        return null;
+      }
+      let id = typeof photo.id === 'string' ? photo.id.trim() : '';
+      if(!id){ id = createSharedPhotoId(); }
+      while(seenIds.has(id)){ id = createSharedPhotoId(); }
+      const createdAt = toFiniteNumber(photo.createdAt, now);
+      const updatedAt = Math.max(createdAt, toFiniteNumber(photo.updatedAt, createdAt));
+      const updatedBy = normalizeActor(photo.updatedBy, fallbackUpdatedBy);
+      return {
+        id,
+        dataUrl: deletedAt == null ? rawDataUrl : null,
+        createdAt,
+        updatedAt,
+        updatedBy,
+        deletedAt,
+        deletedBy: deletedAt == null ? '' : normalizeActor(photo.deletedBy, updatedBy)
+      };
+    }
+
+    function sanitizeSharedTaskV2(task, fallbackUpdatedBy, preferredId){
+      if(!task || typeof task !== 'object'){ return null; }
+      const now = Date.now();
+      const fallbackBy = normalizeActor(fallbackUpdatedBy, 'remote');
+      const photos = [];
+      const seen = new Set();
+      const sourcePhotos = Array.isArray(task.photos)
+        ? task.photos
+        : (task.photos && typeof task.photos === 'object' ? Object.values(task.photos) : []);
+      sourcePhotos.forEach((entry)=>{
+        const sanitized = sanitizeSharedPhotoV2(entry, seen, fallbackBy);
+        if(!sanitized){ return; }
+        seen.add(sanitized.id);
+        photos.push(sanitized);
+      });
+      if(photos.length > MAX_SHARED_PHOTOS){
+        photos.length = MAX_SHARED_PHOTOS;
+      }
+      let id = typeof task.id === 'string' ? task.id.trim() : '';
+      if(!id && typeof preferredId === 'string'){ id = preferredId.trim(); }
+      if(!id){ id = createSharedTaskId(); }
+      const createdAt = toFiniteNumber(task.createdAt, now);
+      const textUpdatedAt = Math.max(createdAt, toFiniteNumber(task.textUpdatedAt, toFiniteNumber(task.updatedAt, createdAt)));
+      const doneUpdatedAt = Math.max(createdAt, toFiniteNumber(task.doneUpdatedAt, toFiniteNumber(task.updatedAt, createdAt)));
+      const textUpdatedBy = normalizeActor(task.textUpdatedBy, fallbackBy);
+      const doneUpdatedBy = normalizeActor(task.doneUpdatedBy, fallbackBy);
+      const deletedAt = task.deletedAt == null ? null : toFiniteNumber(task.deletedAt, null);
+      const deletedBy = deletedAt == null ? '' : normalizeActor(task.deletedBy, fallbackBy);
+      const latest = pickLatestVersion([
+        { at: textUpdatedAt, by: textUpdatedBy },
+        { at: doneUpdatedAt, by: doneUpdatedBy },
+        { at: deletedAt, by: deletedBy },
+        ...photos.map((photo)=>({ at: photo.updatedAt, by: photo.updatedBy }))
+      ], { at: Math.max(createdAt, toFiniteNumber(task.updatedAt, createdAt)), by: normalizeActor(task.updatedBy, fallbackBy) });
+      return {
+        id,
+        text: typeof task.text === 'string' ? task.text : '',
+        done: !!task.done,
+        createdAt,
+        updatedAt: latest.at,
+        updatedBy: latest.by,
+        deletedAt,
+        deletedBy,
+        textUpdatedAt,
+        textUpdatedBy,
+        doneUpdatedAt,
+        doneUpdatedBy,
+        photos
+      };
+    }
+
+    function taskToRemoteRecord(task){
+      const record = {
+        id: task.id,
+        text: task.text,
+        done: !!task.done,
+        createdAt: task.createdAt,
+        updatedAt: task.updatedAt,
+        updatedBy: task.updatedBy,
+        deletedAt: task.deletedAt == null ? null : task.deletedAt,
+        deletedBy: task.deletedAt == null ? null : task.deletedBy || '',
+        textUpdatedAt: task.textUpdatedAt,
+        textUpdatedBy: task.textUpdatedBy,
+        doneUpdatedAt: task.doneUpdatedAt,
+        doneUpdatedBy: task.doneUpdatedBy,
+        photos: {}
+      };
+      (task.photos || []).forEach((photo)=>{
+        if(!photo){ return; }
+        record.photos[photo.id] = {
+          id: photo.id,
+          dataUrl: photo.deletedAt == null ? photo.dataUrl : null,
+          createdAt: photo.createdAt,
+          updatedAt: photo.updatedAt,
+          updatedBy: photo.updatedBy,
+          deletedAt: photo.deletedAt == null ? null : photo.deletedAt,
+          deletedBy: photo.deletedAt == null ? null : photo.deletedBy || ''
+        };
+      });
+      return record;
+    }
+
+    function trimSharedPayloadToLimitV2(payload){
+      if(!payload || !payload.tasks || typeof payload.tasks !== 'object'){
+        return payload;
+      }
+      const photoRefs = [];
+      Object.keys(payload.tasks).forEach((taskId)=>{
+        const task = payload.tasks[taskId];
+        if(!task || !task.photos || typeof task.photos !== 'object'){
+          task.photos = {};
+          return;
+        }
+        const unique = {};
+        const seen = new Set();
+        Object.keys(task.photos).forEach((photoId)=>{
+          const photo = task.photos[photoId];
+          if(photo && !seen.has(photo.id)){
+            seen.add(photo.id);
+            unique[photo.id] = photo;
+          }
+        });
+        task.photos = unique;
+        Object.keys(unique).forEach((photoId)=>{
+          photoRefs.push({ task, photoId, photo: unique[photoId] });
+        });
+      });
+      let serialized = '';
+      try{ serialized = JSON.stringify(payload); }
+      catch(_){ serialized = ''; }
+      photoRefs.sort((a,b)=>{
+        const lenA = (a.photo && typeof a.photo.dataUrl === 'string') ? a.photo.dataUrl.length : 0;
+        const lenB = (b.photo && typeof b.photo.dataUrl === 'string') ? b.photo.dataUrl.length : 0;
+        return lenB - lenA;
+      });
+      while(serialized.length > MAX_SHARED_PAYLOAD_SIZE && photoRefs.length){
+        const { task, photoId } = photoRefs.shift();
+        if(task && task.photos && typeof task.photos === 'object'){
+          delete task.photos[photoId];
+        }
+        try{ serialized = JSON.stringify(payload); }
+        catch(_){ serialized = ''; }
+      }
+      return payload;
+    }
+
+    function buildSharedPayloadV2(list){
+      const fallbackBy = normalizeActor(list && (list.clientId || list.updatedBy || list.metaUpdatedBy), 'remote');
+      const tasks = {};
+      if(Array.isArray(list && list.tasks)){
+        list.tasks.forEach((task)=>{
+          const sanitized = sanitizeSharedTaskV2(task, fallbackBy);
+          if(!sanitized){ return; }
+          tasks[sanitized.id] = taskToRemoteRecord(sanitized);
+        });
+      }
+      return trimSharedPayloadToLimitV2({
+        meta: buildSharedMeta(list, fallbackBy),
+        tasks
+      });
+    }
+
+    function normalizeRemoteListDataV2(raw){
+      if(!raw || typeof raw !== 'object'){ return null; }
+      const now = Date.now();
+      let meta = null;
+      let tasks = [];
+      let needsMigration = false;
+
+      if(raw.meta && typeof raw.meta === 'object'){
+        meta = {
+          title: typeof raw.meta.title === 'string' ? raw.meta.title : 'Lista',
+          updatedAt: toFiniteNumber(raw.meta.updatedAt, now),
+          updatedBy: normalizeActor(raw.meta.updatedBy, 'remote'),
+          schemaVersion: SHARED_SCHEMA_VERSION
+        };
+        if(Array.isArray(raw.tasks)){
+          needsMigration = true;
+          tasks = raw.tasks.map((task)=> sanitizeSharedTaskV2(task, meta.updatedBy)).filter(Boolean);
+        } else if(raw.tasks && typeof raw.tasks === 'object'){
+          tasks = Object.keys(raw.tasks)
+            .map((taskId)=> sanitizeSharedTaskV2(raw.tasks[taskId], meta.updatedBy, taskId))
+            .filter(Boolean);
+        }
+      } else {
+        needsMigration = true;
+        meta = {
+          title: typeof raw.title === 'string' ? raw.title : 'Lista',
+          updatedAt: toFiniteNumber(raw.updatedAt, now),
+          updatedBy: normalizeActor(raw.updatedBy, 'legacy'),
+          schemaVersion: SHARED_SCHEMA_VERSION
+        };
+        tasks = Array.isArray(raw.tasks)
+          ? raw.tasks.map((task)=> sanitizeSharedTaskV2(task, meta.updatedBy)).filter(Boolean)
+          : [];
+      }
+
+      return {
+        title: meta.title,
+        updatedAt: meta.updatedAt,
+        updatedBy: meta.updatedBy,
+        schemaVersion: SHARED_SCHEMA_VERSION,
+        tasks,
+        _needsMigration: needsMigration
+      };
+    }
+
+    async function migrateLegacyListV2(code, normalized){
+      if(!normalized || !normalized._needsMigration){ return normalized; }
+      if(migratingLegacyCodes.has(code)){ return normalized; }
+      migratingLegacyCodes.add(code);
+      try{
+        await set(ref(firebaseDb, `${SHARED_LISTS_ROOT}/${code}`), buildSharedPayloadV2({
+          title: normalized.title,
+          updatedAt: normalized.updatedAt,
+          updatedBy: normalized.updatedBy,
+          metaUpdatedAt: normalized.updatedAt,
+          metaUpdatedBy: normalized.updatedBy,
+          tasks: normalized.tasks
+        }));
+      }finally{
+        migratingLegacyCodes.delete(code);
+      }
+      return Object.assign({}, normalized, { _needsMigration: false });
+    }
+
+    async function shareListToFirebaseV2(code, list){
+      if(!code || !list) throw new Error('Parâmetros inválidos');
+      const normalizedCode = assertValidShareCode(code);
+      await set(ref(firebaseDb, `${SHARED_LISTS_ROOT}/${normalizedCode}`), buildSharedPayloadV2(list));
+    }
+
+    async function applyListPatchToFirebaseV2(code, patch){
+      const normalizedCode = assertValidShareCode(code);
+      if(!patch || typeof patch !== 'object' || Array.isArray(patch)){
+        throw new Error('Patch inválido.');
+      }
+      await update(ref(firebaseDb, `${SHARED_LISTS_ROOT}/${normalizedCode}`), patch);
+    }
+
+    async function getListFromFirebaseV2(code){
+      const normalizedCode = assertValidShareCode(code);
+      const snapshot = await get(child(ref(firebaseDb), `${SHARED_LISTS_ROOT}/${normalizedCode}`));
+      if(!snapshot.exists()){
+        return null;
+      }
+      let normalized = normalizeRemoteListDataV2(snapshot.val());
+      if(normalized && normalized._needsMigration){
+        normalized = await migrateLegacyListV2(normalizedCode, normalized);
+      }
+      if(!normalized){ return null; }
+      return {
+        title: normalized.title,
+        updatedAt: normalized.updatedAt,
+        updatedBy: normalized.updatedBy,
+        schemaVersion: SHARED_SCHEMA_VERSION,
+        tasks: normalized.tasks
+      };
+    }
+
+    async function deleteListFromFirebaseV2(code){
+      const normalizedCode = assertValidShareCode(code);
+      await remove(ref(firebaseDb, `${SHARED_LISTS_ROOT}/${normalizedCode}`));
+    }
+
+    function subscribeToListV2(code, handler){
+      const normalizedCode = assertValidShareCode(code);
+      if(typeof handler !== 'function'){
+        throw new Error('Handler de assinatura invalido.');
+      }
+      let entry = activeSubscriptions.get(normalizedCode);
+      if(!entry){
+        entry = {
+          ref: ref(firebaseDb, `${SHARED_LISTS_ROOT}/${normalizedCode}`),
+          listeners: new Set(),
+        };
+        activeSubscriptions.set(normalizedCode, entry);
+      }
+      const listener = (snapshot)=>{
+        const payload = snapshot.exists() ? normalizeRemoteListDataV2(snapshot.val()) : null;
+        if(payload && payload._needsMigration){
+          migrateLegacyListV2(normalizedCode, payload).catch((error)=>{
+            console.warn('[firebase] Falha ao migrar lista legada.', error);
+          });
+        }
+        if(!payload){
+          handler(null);
+          return;
+        }
+        handler({
+          title: payload.title,
+          updatedAt: payload.updatedAt,
+          updatedBy: payload.updatedBy,
+          schemaVersion: SHARED_SCHEMA_VERSION,
+          tasks: payload.tasks
+        });
+      };
+      onValue(entry.ref, listener);
+      entry.listeners.add(listener);
+      return listener;
+    }
+
+    function unsubscribeFromListV2(code, handler){
+      const normalizedCode = assertValidShareCode(code);
+      const entry = activeSubscriptions.get(normalizedCode);
+      if(!entry){ return; }
+      if(typeof handler === 'function'){
+        off(entry.ref, 'value', handler);
+        entry.listeners.delete(handler);
+      } else {
+        entry.listeners.forEach((listener)=>{
+          off(entry.ref, 'value', listener);
+        });
+        entry.listeners.clear();
+      }
+      if(entry.listeners.size===0){
+        activeSubscriptions.delete(normalizedCode);
+      }
+    }
+
+    window.firebaseShareList = shareListToFirebaseV2;
+    window.firebaseApplyListPatch = applyListPatchToFirebaseV2;
+    window.firebaseGetList = getListFromFirebaseV2;
+    window.firebaseDeleteList = deleteListFromFirebaseV2;
+    window.firebaseSubscribe = subscribeToListV2;
+    window.firebaseUnsubscribe = unsubscribeFromListV2;
     window.firebaseReady = true;
     try{
       window.dispatchEvent(new Event('firebase-ready'));
     }catch(_){ }
   </script>
   
-  <script src="script.js?v=1.0.1"></script>
+  <script src="script.js?v=1.1.0"></script>
 </body>
 </html>
