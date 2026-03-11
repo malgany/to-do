@@ -6,6 +6,7 @@
       let completedCollapsed = false;
       const LIST_STORAGE_KEY = 'todo_lists_v4';
       const LEGACY_LIST_STORAGE_KEY = 'todo_lists_v3';
+      const THEME_PREFERENCE_STORAGE_KEY = 'todo_theme_preference_v1';
       const COMPLETED_COLLAPSE_STORAGE_KEY = 'todo_completed_collapsed_v1';
       const LOCAL_ORDER_STORAGE_KEY = 'todo_local_order_v2';
       const LEGACY_LOCAL_ORDER_STORAGE_KEY = 'todo_local_order_v1';
@@ -206,6 +207,44 @@
         saveLocalGroups(listId, groups);
       }
 
+      function removeTasksFromGroups(listId, taskIds, groups) {
+        if (!listId) return groups || {};
+        const targetIds = new Set(Array.isArray(taskIds) ? taskIds.filter(Boolean) : []);
+        const source = groups || loadLocalGroups(listId);
+        for (const groupId in source) {
+          source[groupId].taskIds = (source[groupId].taskIds || []).filter((taskId)=> !targetIds.has(taskId));
+        }
+        deleteEmptyGroups(listId, source);
+        return source;
+      }
+
+      function getGroupSnapshotForTask(listId, taskId) {
+        if (!listId || !taskId) return null;
+        const groups = loadLocalGroups(listId);
+        for (const [groupId, group] of Object.entries(groups)) {
+          if (Array.isArray(group.taskIds) && group.taskIds.includes(taskId)) {
+            return {
+              groupId,
+              taskIds: group.taskIds.slice(),
+              color: group.color,
+              createdAt: group.createdAt
+            };
+          }
+        }
+        return null;
+      }
+
+      function restoreTaskGroupSnapshot(listId, snapshot) {
+        if (!listId || !snapshot || !snapshot.groupId || !Array.isArray(snapshot.taskIds)) return;
+        const groups = removeTasksFromGroups(listId, snapshot.taskIds);
+        groups[snapshot.groupId] = {
+          taskIds: snapshot.taskIds.slice(),
+          color: snapshot.color || getColorObject().name,
+          createdAt: snapshot.createdAt || Date.now()
+        };
+        saveLocalGroups(listId, groups);
+      }
+
       // Limpar TODOS os grupos de uma lista ao excluí-la
       function cleanupGroupsForList(listId) {
         if (!listId) return;
@@ -239,6 +278,8 @@
       const appSubtitle = el('appSubtitle');
       const appMenuBtn = el('appMenuBtn');
       const appMenu = el('appMenu');
+      const selectTasksAction = el('selectTasksAction');
+      const themeToggleAction = el('themeToggleAction');
       const shareListAction = el('shareListAction');
       const shareBackdrop = el('shareBackdrop');
       const shareCodeValue = el('shareCodeValue');
@@ -256,6 +297,11 @@
       const composerCheckbox = el('composerCheckbox');
       const sendTask = el('sendTask');
       const tasksContainer = el('tasksContainer');
+      const selectionToolbar = el('selectionToolbar');
+      const selectionCount = el('selectionCount');
+      const groupSelectionButton = el('groupSelectionButton');
+      const ungroupSelectionButton = el('ungroupSelectionButton');
+      const cancelSelectionButton = el('cancelSelectionButton');
       const completedGroup = el('completedGroup');
       const completedHeader = el('completedHeader');
       const completedList = el('completedList');
@@ -274,6 +320,9 @@
         camera: createHiddenPhotoInput({ capture: 'environment' }),
         gallery: createHiddenPhotoInput({})
       };
+      const pendingDeleteUndos = new Map();
+      let isSelectionMode = false;
+      let selectedTaskIds = new Set();
       let activePhotoId = null;
       const PHOTO_SYNC_STATE_STORAGE_KEY = 'todo_photo_sync_state_v1';
       const pendingPhotoIdsByListTask = Object.create(null);
@@ -673,7 +722,7 @@
       const codeBackdrop = el('codeBackdrop');
       const codeCancel = el('codeCancel');
       const codeImport = el('codeImport');
-      let codeInputs = [];
+      const codeInputField = el('codeInputField');
 
       const taskDetailRow = el('taskDetailRow');
       const taskDetailCheckbox = el('taskDetailCheckbox');
@@ -690,6 +739,10 @@
 
       // helpers
       let isMenuOpen = false;
+      let themePreference = 'system';
+      const themeMediaQuery = (typeof window !== 'undefined' && typeof window.matchMedia === 'function')
+        ? window.matchMedia('(prefers-color-scheme: dark)')
+        : null;
       let activeShareCode = '';
       let copyFeedbackTimer = null;
       let confirmResolver = null;
@@ -898,12 +951,29 @@
 
       function showToast(message, opts){
         if(!toastContainer){ return; }
-        const options = Object.assign({ type: 'info', duration: 3200 }, opts||{});
+        const options = Object.assign({ type: 'info', duration: 3200, actionLabel: '', onAction: null }, opts||{});
         const toast = document.createElement('div');
         const typeClass = (options.type==='error') ? ' error' : (options.type==='success') ? ' success' : '';
         toast.className = 'toast'+typeClass;
         toast.setAttribute('role','status');
-        toast.textContent = message;
+        const label = document.createElement('span');
+        label.className = 'toast-message';
+        label.textContent = message;
+        toast.appendChild(label);
+        let actionButton = null;
+        if(options.actionLabel && typeof options.onAction === 'function'){
+          actionButton = document.createElement('button');
+          actionButton.type = 'button';
+          actionButton.className = 'toast-action';
+          actionButton.textContent = options.actionLabel;
+          actionButton.addEventListener('click', (event)=>{
+            event.stopPropagation();
+            clearTimeout(timer);
+            try{ options.onAction(); }catch(_){ }
+            remove();
+          });
+          toast.appendChild(actionButton);
+        }
         toastContainer.appendChild(toast);
         requestAnimationFrame(()=>{ toast.classList.add('show'); });
         const remove = ()=>{
@@ -916,6 +986,13 @@
           clearTimeout(timer);
           remove();
         });
+        return {
+          dismiss: ()=>{
+            clearTimeout(timer);
+            remove();
+          },
+          actionButton
+        };
       }
 
       function createHiddenPhotoInput(options){
@@ -1263,6 +1340,9 @@
       }catch(_){ }
 
       function showScreen(screen){
+        if(screen!==screenListDetail && isSelectionMode){
+          exitSelectionMode({ rerender:false });
+        }
         [screenLists, screenListDetail, screenTaskDetail].forEach(s=>s.classList.remove('active'));
         screen.classList.add('active');
         updateAppBar(screen);
@@ -1784,6 +1864,14 @@
         task.deletedAt = normalizeTimestamp(timestamp, nowTs());
         task.deletedBy = normalizeActor(actor, clientId);
         refreshTaskAggregateMetadata(task);
+      }
+
+      function restoreTaskDeletedState(task, timestamp, actor){
+        if(!task){ return; }
+        task.deletedAt = null;
+        task.deletedBy = '';
+        task.updatedAt = normalizeTimestamp(timestamp, nowTs());
+        task.updatedBy = normalizeActor(actor, clientId);
       }
 
       function upsertTaskPhoto(task, photo, timestamp, actor){
@@ -2380,6 +2468,69 @@
         list.tasks = [...activeTasks, ...doneTasks, ...deletedTasks];
       }
 
+      function normalizeThemePreference(value){
+        return ['system', 'light', 'dark'].includes(value) ? value : 'system';
+      }
+
+      function getResolvedTheme(preference){
+        const pref = normalizeThemePreference(preference || themePreference);
+        const prefersDark = !!(themeMediaQuery && themeMediaQuery.matches);
+        return (pref === 'dark' || (pref === 'system' && prefersDark)) ? 'dark' : 'light';
+      }
+
+      function updateThemeColorMeta(resolvedTheme){
+        try{
+          const themeMeta = document.querySelector('meta[name="theme-color"]');
+          if(themeMeta){
+            themeMeta.setAttribute('content', resolvedTheme === 'dark' ? '#05080C' : '#F3F4F6');
+          }
+        }catch(_){ }
+      }
+
+      function updateThemeToggleLabel(){
+        if(!themeToggleAction){ return; }
+        const labels = {
+          system: 'Tema: Sistema',
+          light: 'Tema: Claro',
+          dark: 'Tema: Escuro'
+        };
+        themeToggleAction.textContent = labels[normalizeThemePreference(themePreference)] || labels.system;
+      }
+
+      function applyTheme(preference, options){
+        const opts = Object.assign({ persist:false, announce:false }, options||{});
+        themePreference = normalizeThemePreference(preference);
+        const resolvedTheme = getResolvedTheme(themePreference);
+        document.documentElement.classList.toggle('dark', resolvedTheme === 'dark');
+        updateThemeColorMeta(resolvedTheme);
+        updateThemeToggleLabel();
+        if(opts.persist){
+          try{ localStorage.setItem(THEME_PREFERENCE_STORAGE_KEY, themePreference); }catch(_){ }
+        }
+        if(opts.announce){
+          const modeLabel = themePreference === 'system'
+            ? `Sistema (${resolvedTheme === 'dark' ? 'escuro' : 'claro'})`
+            : (resolvedTheme === 'dark' ? 'Escuro' : 'Claro');
+          showToast(`Tema alterado para ${modeLabel}.`, { type: 'success' });
+        }
+      }
+
+      function loadThemePreference(){
+        try{
+          themePreference = normalizeThemePreference(localStorage.getItem(THEME_PREFERENCE_STORAGE_KEY) || 'system');
+        }catch(_){
+          themePreference = 'system';
+        }
+        applyTheme(themePreference);
+      }
+
+      function cycleThemePreference(){
+        const order = ['system', 'light', 'dark'];
+        const currentIndex = Math.max(order.indexOf(normalizeThemePreference(themePreference)), 0);
+        const nextPreference = order[(currentIndex + 1) % order.length];
+        applyTheme(nextPreference, { persist:true, announce:true });
+      }
+
       function hideAppMenu(){
         if(!isMenuOpen) return;
         appMenu.hidden = true;
@@ -2399,7 +2550,9 @@
           isMenuOpen = true;
           document.addEventListener('click', handleOutsideMenuClick, true);
           document.addEventListener('keydown', handleMenuKeyDown);
-          shareListAction.focus();
+          if(selectTasksAction){ selectTasksAction.focus(); }
+          else if(themeToggleAction){ themeToggleAction.focus(); }
+          else { shareListAction.focus(); }
         }
       }
 
@@ -2425,6 +2578,21 @@
         const sanitized = (code||'').replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
         if(sanitized.length<=3) return sanitized;
         return sanitized.slice(0,3)+' '+sanitized.slice(3);
+      }
+
+      function normalizeCodeValue(value){
+        return String(value || '').toUpperCase().replace(/[^0-9A-Z]/g,'').slice(0,6);
+      }
+
+      function getCodeInputValue(){
+        return normalizeCodeValue(codeInputField ? codeInputField.value : '');
+      }
+
+      function syncCodeInputValue(value){
+        if(!codeInputField){ return ''; }
+        const normalized = normalizeCodeValue(value);
+        codeInputField.value = formatDisplayCode(normalized);
+        return normalized;
       }
 
       function setShareDialogStatus(message, isError){
@@ -2598,6 +2766,36 @@
         return svg;
       }
 
+      function createDragHandleIconSvg(){
+        const svg = document.createElementNS(SVG_NS, 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('aria-hidden', 'true');
+        svg.setAttribute('focusable', 'false');
+        [7, 12, 17].forEach((y)=>{
+          [9, 15].forEach((x)=>{
+            const dot = document.createElementNS(SVG_NS, 'circle');
+            dot.setAttribute('cx', String(x));
+            dot.setAttribute('cy', String(y));
+            dot.setAttribute('r', '1.6');
+            dot.setAttribute('fill', 'currentColor');
+            svg.appendChild(dot);
+          });
+        });
+        return svg;
+      }
+
+      function createTrashIconSvg(){
+        const svg = document.createElementNS(SVG_NS, 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('aria-hidden', 'true');
+        svg.setAttribute('focusable', 'false');
+        const path = document.createElementNS(SVG_NS, 'path');
+        path.setAttribute('d', 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z');
+        path.setAttribute('fill', 'currentColor');
+        svg.appendChild(path);
+        return svg;
+      }
+
       function formatSubtitleDate(){
         try{
           const now = new Date();
@@ -2692,12 +2890,11 @@
       function updateCodeImportState(){
         try{
           if(!codeImport){ return; }
-          if(!codeInputs || codeInputs.length===0){
+          if(!codeInputField){
             codeImport.disabled = true;
             return;
           }
-          const filled = codeInputs.every(input=> (input.value||'').trim().length===1);
-          codeImport.disabled = !filled;
+          codeImport.disabled = getCodeInputValue().length !== 6;
         }catch(_){
           if(codeImport){ codeImport.disabled = true; }
         }
@@ -2709,44 +2906,46 @@
         codeBackdrop.classList.add('show');
         lockScroll();
         applyKeyboardInset();
-        // collect inputs on first open
-        if(codeInputs.length===0){
-          codeInputs = Array.from(codeBackdrop.querySelectorAll('input.code-input'));
-          // attach handlers
-          codeInputs.forEach((input, idx)=>{
-            input.addEventListener('input', (e)=>{
-              const val = input.value.toUpperCase().replace(/[^0-9A-Z]/g,'');
-              input.value = val.slice(0,1);
-              if(val && idx<codeInputs.length-1){ codeInputs[idx+1].focus(); }
-              updateCodeImportState();
-            });
-            input.addEventListener('keydown', (e)=>{
-              if(e.key==='Backspace' && !input.value && idx>0){ codeInputs[idx-1].focus(); }
-              if(e.key==='ArrowLeft' && idx>0){ e.preventDefault(); codeInputs[idx-1].focus(); }
-              if(e.key==='ArrowRight' && idx<codeInputs.length-1){ e.preventDefault(); codeInputs[idx+1].focus(); }
-              if(e.key==='Enter'){ e.preventDefault(); }
-              if(e.key.length===1){
-                // allow typing to replace and jump next
-                input.value = '';
-              }
-            });
-            input.addEventListener('paste', (e)=>{
-              e.preventDefault();
-              const text = (e.clipboardData || window.clipboardData).getData('text') || '';
-              const clean = text.replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
-              for(let i=0;i<codeInputs.length;i++){
-                codeInputs[i].value = clean[i] || '';
-              }
-              const nextIndex = Math.min(clean.length, codeInputs.length-1);
-              codeInputs[nextIndex].focus();
-              updateCodeImportState();
-            });
+        if(codeInputField && !codeInputField.dataset.bound){
+          codeInputField.dataset.bound = 'true';
+          codeInputField.addEventListener('input', ()=>{
+            syncCodeInputValue(codeInputField.value);
+            updateCodeImportState();
           });
-        } else {
-          codeInputs.forEach(i=>i.value='');
+          codeInputField.addEventListener('keydown', (e)=>{
+            if(e.key === 'Enter'){
+              e.preventDefault();
+              if(!codeImport.disabled){ codeImport.click(); }
+              return;
+            }
+            if(e.ctrlKey || e.metaKey || e.altKey){ return; }
+            if(['Backspace','Delete','Tab','Home','End','ArrowLeft','ArrowRight'].includes(e.key)){ return; }
+            if(e.key.length !== 1){ return; }
+            if(!/[0-9a-z]/i.test(e.key)){
+              e.preventDefault();
+              return;
+            }
+            const current = getCodeInputValue();
+            const hasSelection = codeInputField.selectionStart !== codeInputField.selectionEnd;
+            if(current.length >= 6 && !hasSelection){
+              e.preventDefault();
+            }
+          });
+          codeInputField.addEventListener('paste', (e)=>{
+            e.preventDefault();
+            const text = (e.clipboardData || window.clipboardData).getData('text') || '';
+            syncCodeInputValue(text);
+            updateCodeImportState();
+          });
         }
+        syncCodeInputValue('');
         updateCodeImportState();
-        setTimeout(()=>{ if(codeInputs[0]) codeInputs[0].focus(); }, 40);
+        setTimeout(()=>{
+          if(!codeInputField){ return; }
+          codeInputField.focus();
+          const cursorIndex = codeInputField.value.length;
+          codeInputField.setSelectionRange(cursorIndex, cursorIndex);
+        }, 40);
       }
 
       function closeCodeModal(){
@@ -2788,6 +2987,8 @@
       function openList(id, options){
         const opts = Object.assign({ fromHistory:false }, options||{});
         currentListId = id;
+        isSelectionMode = false;
+        selectedTaskIds = new Set();
         const list = lists.find(x=>x.id===id);
         currentListName.textContent = list ? list.title : 'Lista';
         renderTasks();
@@ -2800,6 +3001,7 @@
       }
 
       function openTaskDetail(taskId, options){
+        if(isSelectionMode){ return; }
         const opts = Object.assign({ fromHistory:false }, options||{});
         currentTaskId = taskId;
         const list = lists.find(x=>x.id===currentListId);
@@ -2817,6 +3019,7 @@
         // checkbox state
         if(task.done){ taskDetailCheckbox.classList.add('checked'); taskDetailCheckbox.innerHTML='✓'; }
         else { taskDetailCheckbox.classList.remove('checked'); taskDetailCheckbox.innerHTML=''; }
+        setCheckedMark(taskDetailCheckbox, !!task.done);
         showScreen(screenTaskDetail);
         // focus contenteditable when opening
         setTimeout(()=>{
@@ -2836,6 +3039,97 @@
       function placeCaretAtEnd(el){
         if(!el) return;
         const range = document.createRange(); const sel = window.getSelection(); range.selectNodeContents(el); range.collapse(false); sel.removeAllRanges(); sel.addRange(range);
+      }
+
+      function buildTaskElement(task, isDone){
+        const node = document.createElement('div');
+        node.className = isDone ? 'task done' : 'task';
+        node.dataset.id = task.id;
+        if(isSelectionMode && selectedTaskIds.has(task.id)){
+          node.classList.add('selected');
+        }
+
+        const swipeAction = document.createElement('div');
+        swipeAction.className = 'task-swipe-action';
+        swipeAction.appendChild(createTrashIconSvg());
+
+        const body = document.createElement('div');
+        body.className = 'task-body';
+
+        const cb = document.createElement('button');
+        if(isDone){
+          cb.className = 'checkbox-round checked';
+          cb.setAttribute('aria-pressed', 'true');
+          cb.title = 'Desmarcar';
+          cb.innerHTML = 'âœ“';
+          cb.addEventListener('click', (ev)=>{
+            ev.stopPropagation();
+            if(isSelectionMode){
+              toggleTaskSelection(task.id);
+              return;
+            }
+            animateAndToggle(cb, task.id, false);
+          });
+          setCheckedMark(cb, true);
+        } else {
+          cb.className = 'checkbox-round';
+          cb.setAttribute('aria-pressed', 'false');
+          cb.title = 'Marcar como concluÃ­da';
+          cb.addEventListener('click', (ev)=>{
+            ev.stopPropagation();
+            if(isSelectionMode){
+              toggleTaskSelection(task.id);
+              return;
+            }
+            animateAndToggle(cb, task.id, true);
+          });
+        }
+
+        const txt = document.createElement('div');
+        txt.className = 'text';
+        txt.textContent = task.text;
+        txt.addEventListener('click', (ev)=>{
+          ev.stopPropagation();
+          if(isSelectionMode){
+            toggleTaskSelection(task.id);
+            return;
+          }
+          openTaskDetail(task.id);
+        });
+
+        const handle = document.createElement('button');
+        handle.type = 'button';
+        handle.className = 'drag-handle';
+        handle.setAttribute('aria-label', `Reordenar ${task.text}`);
+        handle.appendChild(createDragHandleIconSvg());
+        handle.addEventListener('click', (ev)=> ev.preventDefault());
+
+        if(isSelectionMode){
+          handle.disabled = true;
+          handle.tabIndex = -1;
+        }
+
+        body.appendChild(cb);
+        body.appendChild(txt);
+        body.appendChild(handle);
+        if(isSelectionMode){
+          body.addEventListener('click', ()=> toggleTaskSelection(task.id));
+        } else {
+          body.addEventListener('click', (event)=>{
+            if(event.target.closest('.checkbox-round') || event.target.closest('.drag-handle')){ return; }
+            openTaskDetail(task.id);
+          });
+          attachSwipeToDeleteV2(node, body, task.id);
+        }
+
+        node.appendChild(swipeAction);
+        node.appendChild(body);
+        return node;
+      }
+
+      function setCheckedMark(buttonEl, checked){
+        if(!buttonEl){ return; }
+        buttonEl.innerHTML = checked ? '&#10003;' : '';
       }
 
       // Renderizar tarefas com suporte a agrupamento visual
@@ -2918,7 +3212,7 @@
 
             // Adicionar tarefas do grupo na ordem original
             groupTasks.forEach(groupTask => {
-              const taskEl = createTaskElement(groupTask, isDone);
+              const taskEl = buildTaskElement(groupTask, isDone);
               groupContainer.appendChild(taskEl);
               processedTasks.add(groupTask.id);
             });
@@ -2927,7 +3221,7 @@
             delete groupedTasks[groupId]; // Evitar renderizar o mesmo grupo duas vezes
           } else if (!groupId) {
             // Renderizar tarefa sem grupo
-            const taskEl = createTaskElement(task, isDone);
+            const taskEl = buildTaskElement(task, isDone);
             container.appendChild(taskEl);
             processedTasks.add(task.id);
           }
@@ -2938,6 +3232,9 @@
         tasksContainer.innerHTML=''; completedList.innerHTML='';
         const list = lists.find(x=>x.id===currentListId);
         if(!list) return;
+        if(selectedTaskIds.size){
+          selectedTaskIds = new Set(Array.from(selectedTaskIds).filter((taskId)=> !!findTaskById(list, taskId, false)));
+        }
         completedCollapsed = getCompletedCollapseForList(list.id);
         const visibleTasks = getVisibleTasks(list);
         const active = visibleTasks.filter(t=>!t.done);
@@ -2967,7 +3264,16 @@
         }
         
         // Inicializar sortable para as tarefas após renderização
-        initSortableTasks();
+        updateSelectionToolbar();
+        if(openComposer){
+          openComposer.hidden = isSelectionMode;
+          openComposer.style.display = isSelectionMode ? 'none' : '';
+        }
+        if(isSelectionMode){
+          destroyTaskSortables();
+        } else {
+          initSortableTasksV2();
+        }
 
         if(currentTaskId && screenTaskDetail.classList.contains('active')){
           const currentTask = findTaskById(list, currentTaskId, false);
@@ -2985,6 +3291,91 @@
             }
           }
         }
+      }
+
+      function updateSelectionToolbar(){
+        if(!selectionToolbar || !selectionCount || !groupSelectionButton || !ungroupSelectionButton || !cancelSelectionButton){
+          return;
+        }
+        const list = lists.find((entry)=> entry && entry.id===currentListId);
+        const selectedTasks = list
+          ? Array.from(selectedTaskIds)
+            .map((taskId)=> findTaskById(list, taskId, false))
+            .filter(Boolean)
+          : [];
+        const count = selectedTasks.length;
+        const doneStates = new Set(selectedTasks.map((task)=> !!task.done));
+        const canGroup = count >= 2 && doneStates.size === 1;
+        const canUngroup = selectedTasks.some((task)=> !!getTaskGroup(currentListId, task.id));
+        selectionToolbar.hidden = !isSelectionMode;
+        selectionCount.textContent = `${count} ${count===1 ? 'item' : 'itens'}`;
+        groupSelectionButton.disabled = !canGroup;
+        ungroupSelectionButton.disabled = !canUngroup;
+        if(selectTasksAction){
+          selectTasksAction.textContent = isSelectionMode ? 'Cancelar selecao' : 'Selecionar tarefas';
+        }
+      }
+
+      function enterSelectionMode(){
+        if(!currentListId || isSelectionMode){ return; }
+        hideComposer();
+        selectedTaskIds = new Set();
+        isSelectionMode = true;
+        updateSelectionToolbar();
+        renderTasks();
+      }
+
+      function exitSelectionMode(options){
+        const opts = Object.assign({ preserveSelection:false, rerender:true }, options||{});
+        if(!isSelectionMode && !selectedTaskIds.size){ return; }
+        isSelectionMode = false;
+        if(!opts.preserveSelection){
+          selectedTaskIds = new Set();
+        }
+        updateSelectionToolbar();
+        if(opts.rerender && currentListId){
+          renderTasks();
+        }
+      }
+
+      function toggleTaskSelection(taskId){
+        if(!isSelectionMode || !taskId){ return; }
+        if(selectedTaskIds.has(taskId)){ selectedTaskIds.delete(taskId); }
+        else { selectedTaskIds.add(taskId); }
+        updateSelectionToolbar();
+        renderTasks();
+      }
+
+      function groupSelectedTasks(){
+        if(!currentListId || selectedTaskIds.size < 2){ return; }
+        const list = lists.find((entry)=> entry && entry.id===currentListId);
+        if(!list){ return; }
+        const selectedTasks = Array.from(selectedTaskIds)
+          .map((taskId)=> findTaskById(list, taskId, false))
+          .filter(Boolean);
+        if(selectedTasks.length < 2){ return; }
+        const doneStates = new Set(selectedTasks.map((task)=> !!task.done));
+        if(doneStates.size !== 1){ return; }
+        const taskIds = selectedTasks.map((task)=> task.id);
+        const groups = removeTasksFromGroups(currentListId, taskIds);
+        const groupId = createGroupId();
+        const colorObj = getNextGroupColor(currentListId);
+        groups[groupId] = {
+          taskIds,
+          color: colorObj.name,
+          createdAt: Date.now()
+        };
+        saveLocalGroups(currentListId, groups);
+        showToast('Tarefas agrupadas.', { type: 'success' });
+        exitSelectionMode();
+      }
+
+      function ungroupSelectedTasks(){
+        if(!currentListId || !selectedTaskIds.size){ return; }
+        const groups = removeTasksFromGroups(currentListId, Array.from(selectedTaskIds));
+        saveLocalGroups(currentListId, groups);
+        showToast('Agrupamento removido.', { type: 'success' });
+        exitSelectionMode();
       }
 
       // animation helper: add pop class then toggle state
@@ -3021,7 +3412,7 @@
         saveState();
         renderTasks();
         // Garantir que o Sortable seja reativado após mudança de status
-        try{ initSortableTasks(); }catch(_){ }
+        try{ initSortableTasksV2(); }catch(_){ }
         renderLists();
         requestSync(list.id);
         
@@ -3029,18 +3420,66 @@
         if(currentTaskId===taskId && screenTaskDetail.classList.contains('active')){
           if(task.done){ taskDetailCheckbox.classList.add('checked'); taskDetailCheckbox.innerHTML='✓'; }
           else{ taskDetailCheckbox.classList.remove('checked'); taskDetailCheckbox.innerHTML=''; }
+          setCheckedMark(taskDetailCheckbox, !!task.done);
           // keep user on task detail
         }
       }
 
-      function deleteTask(taskId){
+      function queueDeleteUndo(list, task, undoInfo){
+        if(!list || !task || !task.id){ return; }
+        const existing = pendingDeleteUndos.get(task.id);
+        if(existing && existing.timer){ clearTimeout(existing.timer); }
+        const record = Object.assign({ listId: list.id, taskId: task.id }, undoInfo || {});
+        record.timer = setTimeout(()=>{ pendingDeleteUndos.delete(task.id); }, 5200);
+        pendingDeleteUndos.set(task.id, record);
+        showToast('Tarefa excluida.', {
+          duration: 5000,
+          actionLabel: 'Desfazer',
+          onAction: ()=> restoreDeletedTask(task.id)
+        });
+      }
+
+      function restoreDeletedTask(taskId){
+        const undoInfo = pendingDeleteUndos.get(taskId);
+        if(!undoInfo){ return; }
+        pendingDeleteUndos.delete(taskId);
+        if(undoInfo.timer){ clearTimeout(undoInfo.timer); }
+        const list = lists.find((entry)=> entry && entry.id===undoInfo.listId);
+        if(!list){ return; }
+        const task = findTaskById(list, taskId, true);
+        if(!task){ return; }
+        const ts = nowTs();
+        touchListMeta(list, ts, clientId);
+        restoreTaskDeletedState(task, ts, clientId);
+        enqueueSyncOperation(list, buildTaskFieldPatch(list, task, 'delete'), [
+          { kind:'task_delete', taskId: task.id, at: task.deletedAt, by: task.deletedBy }
+        ]);
+        if(undoInfo.localOrder && typeof undoInfo.localOrder === 'object'){
+          setLocalOrderForList(list.id, Object.assign({}, undoInfo.localOrder));
+        } else {
+          updateLocalOrderForList(list.id);
+        }
+        if(undoInfo.groupSnapshot){
+          restoreTaskGroupSnapshot(list.id, undoInfo.groupSnapshot);
+        }
+        saveState();
+        renderTasks();
+        renderLists();
+        requestSync(list.id);
+        showToast('Tarefa restaurada.', { type: 'success' });
+      }
+
+      function deleteTask(taskId, options){
+        const opts = Object.assign({ allowUndo:false }, options||{});
         const list = lists.find(x=>x.id===currentListId); if(!list) return;
         const task = findTaskById(list, taskId, false); if(!task) return;
+        const undoInfo = opts.allowUndo ? {
+          localOrder: Object.assign({}, getLocalOrderForList(list.id)),
+          groupSnapshot: getGroupSnapshotForTask(list.id, taskId)
+        } : null;
         clearPendingPhotos(list.id, taskId);
-        
-        // Limpar grupos ao excluir tarefa
         cleanupGroupsForTask(list.id, taskId);
-        
+
         const ts = nowTs();
         touchListMeta(list, ts, clientId);
         markTaskDeleted(task, ts, clientId);
@@ -3055,7 +3494,13 @@
           replaceHistoryState(SCREEN_KEYS.LIST_DETAIL, { listId: list.id });
         }
         updateLocalOrderForList(list.id);
-        saveState(); renderTasks(); renderLists(); requestSync(list.id);
+        saveState();
+        renderTasks();
+        renderLists();
+        requestSync(list.id);
+        if(opts.allowUndo){
+          queueDeleteUndo(list, task, undoInfo);
+        }
       }
 
       function attachSwipeToDelete(node, taskId){
@@ -3147,8 +3592,97 @@
         node.addEventListener('click', (ev)=>{ if(moved){ ev.stopPropagation(); ev.preventDefault(); } });
       }
 
+      function attachSwipeToDeleteV2(node, swipeSurface, taskId){
+        const threshold = 0.4;
+        let startX = 0;
+        let startY = 0;
+        let currentX = 0;
+        let tracking = false;
+        let swiping = false;
+        let suppressClick = false;
+        let width = 0;
+
+        function setTranslate(x){
+          swipeSurface.style.transform = `translateX(${x}px)`;
+          const ratio = Math.max(0, Math.min(1, Math.abs(x) / Math.max(width || 1, 1)));
+          node.style.setProperty('--swipe-progress', ratio.toFixed(3));
+        }
+
+        function resetSwipe(){
+          swipeSurface.classList.add('swipe-anim');
+          setTranslate(0);
+          setTimeout(()=>{
+            swipeSurface.classList.remove('swipe-anim');
+            node.style.removeProperty('--swipe-progress');
+          }, 180);
+        }
+
+        function onPointerDown(event){
+          if(isSelectionMode){ return; }
+          if(event.button !== undefined && event.button !== 0){ return; }
+          if(event.target.closest('.drag-handle') || event.target.closest('.checkbox-round')){ return; }
+          tracking = true;
+          swiping = false;
+          suppressClick = false;
+          width = swipeSurface.offsetWidth || node.offsetWidth || 1;
+          startX = event.clientX || 0;
+          startY = event.clientY || 0;
+          currentX = startX;
+          swipeSurface.classList.remove('swipe-anim');
+        }
+
+        function onPointerMove(event){
+          if(!tracking){ return; }
+          const x = event.clientX || 0;
+          const y = event.clientY || 0;
+          const dx = x - startX;
+          const dy = y - startY;
+          currentX = x;
+          if(!swiping){
+            if(Math.abs(dx) < 8 && Math.abs(dy) < 8){ return; }
+            if(Math.abs(dx) <= Math.abs(dy) || dx >= 0){
+              tracking = false;
+              return;
+            }
+            swiping = true;
+            try{ swipeSurface.setPointerCapture && swipeSurface.setPointerCapture(event.pointerId); }catch(_){ }
+          }
+          suppressClick = true;
+          if(event.cancelable){ event.preventDefault(); }
+          setTranslate(Math.max(dx, -width * 0.7));
+        }
+
+        function onPointerUp(event){
+          if(!tracking && !swiping){ return; }
+          const endX = event.clientX || currentX;
+          const dx = Math.min(0, endX - startX);
+          const ratio = Math.abs(dx) / Math.max(width || 1, 1);
+          tracking = false;
+          if(swiping && ratio >= threshold){
+            swipeSurface.classList.add('swipe-anim');
+            setTranslate(-Math.max(width * 0.7, 120));
+            setTimeout(()=>{ deleteTask(taskId, { allowUndo:true }); }, 150);
+          } else {
+            resetSwipe();
+          }
+          swiping = false;
+        }
+
+        swipeSurface.addEventListener('pointerdown', onPointerDown, { passive: true });
+        swipeSurface.addEventListener('pointermove', onPointerMove);
+        swipeSurface.addEventListener('pointerup', onPointerUp);
+        swipeSurface.addEventListener('pointercancel', onPointerUp);
+        swipeSurface.addEventListener('click', (event)=>{
+          if(suppressClick){
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        });
+      }
+
       // Composer controls (overlay)
       function showComposer(){
+        if(isSelectionMode){ return; }
         composerBackdrop.style.display='flex';
         composerBackdrop.classList.add('show');
         composerBackdrop.setAttribute('aria-hidden','false');
@@ -3168,6 +3702,7 @@
       }
 
       function toggleComposer(){
+        if(isSelectionMode){ return; }
         if(composerBackdrop.style.display==='flex' || composerBackdrop.classList.contains('show')) hideComposer(); else showComposer();
       }
 
@@ -3326,7 +3861,7 @@
       listNameInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter' && !modalPrimary.disabled){ modalPrimary.click(); } });
       modalBackdrop.addEventListener('click', (e)=>{ if(e.target===modalBackdrop) closeModal(); });
 
-      currentListName.addEventListener('click', ()=>{ if(!currentListId) return; openModal('rename', currentListId); setTimeout(()=>{ const len=listNameInput.value.length; listNameInput.setSelectionRange(len,len); },50); });
+      currentListName.addEventListener('click', ()=>{ if(!currentListId || isSelectionMode) return; openModal('rename', currentListId); setTimeout(()=>{ const len=listNameInput.value.length; listNameInput.setSelectionRange(len,len); },50); });
       currentListName.addEventListener('keydown', (e)=>{ if(e.key==='Enter') currentListName.click(); });
 
       openComposer.addEventListener('click', toggleComposer);
@@ -3356,7 +3891,23 @@
       });
 
       appMenuBtn.addEventListener('click', toggleAppMenu);
+      if(selectTasksAction){
+        selectTasksAction.addEventListener('click', ()=>{
+          hideAppMenu();
+          if(isSelectionMode){ exitSelectionMode(); }
+          else { enterSelectionMode(); }
+        });
+      }
+      if(themeToggleAction){
+        themeToggleAction.addEventListener('click', ()=>{
+          cycleThemePreference();
+          hideAppMenu();
+        });
+      }
       shareListAction.addEventListener('click', ()=>{ hideAppMenu(); openShareDialog(); });
+      if(groupSelectionButton){ groupSelectionButton.addEventListener('click', groupSelectedTasks); }
+      if(ungroupSelectionButton){ ungroupSelectionButton.addEventListener('click', ungroupSelectedTasks); }
+      if(cancelSelectionButton){ cancelSelectionButton.addEventListener('click', ()=> exitSelectionMode()); }
       if(deleteListAction){
         deleteListAction.addEventListener('click', async ()=>{
           hideAppMenu();
@@ -3401,19 +3952,18 @@
       if(codeImport){
         codeImport.addEventListener('click', async ()=>{
           try{
-            if(!codeInputs || codeInputs.length===0){ return; }
-            const raw = codeInputs.map(i=> (i.value||'').toUpperCase().replace(/[^0-9A-Z]/g,'')).join('');
-            const normalized = raw.slice(0,6);
+            if(!codeInputField){ return; }
+            const normalized = getCodeInputValue();
             if(normalized.length!==6){
               updateCodeImportState();
               showToast('Informe um código de 6 caracteres.', { type: 'error' });
-              setTimeout(()=>{ if(codeInputs[0]) codeInputs[0].focus(); }, 150);
+              setTimeout(()=>{ if(codeInputField) codeInputField.focus(); }, 150);
               return;
             }
             if(typeof window === 'undefined' || typeof window.firebaseGetList !== 'function'){
               updateCodeImportState();
               showToast('Importação indisponível no momento.', { type: 'error' });
-              setTimeout(()=>{ if(codeInputs[0]) codeInputs[0].focus(); }, 150);
+              setTimeout(()=>{ if(codeInputField) codeInputField.focus(); }, 150);
               return;
             }
             codeImport.disabled = true;
@@ -3421,7 +3971,7 @@
             updateCodeImportState();
             if(!remote){
               showToast('Código não encontrado.', { type: 'error' });
-              setTimeout(()=>{ if(codeInputs[0]) codeInputs[0].focus(); }, 150);
+              setTimeout(()=>{ if(codeInputField) codeInputField.focus(); }, 150);
               return;
             }
             const id = 'l_'+Date.now();
@@ -3454,7 +4004,7 @@
           }catch(e){
             try{ updateCodeImportState(); }catch(_){ }
             showToast('Ocorreu um erro ao importar.', { type: 'error' });
-            setTimeout(()=>{ if(codeInputs[0]) codeInputs[0].focus(); }, 150);
+            setTimeout(()=>{ if(codeInputField) codeInputField.focus(); }, 150);
           }
         });
       }
@@ -3478,19 +4028,9 @@
       
       // Adicionar script Sortable.js para drag and drop
       function loadSortableJS() {
-        return new Promise((resolve, reject) => {
-          if (window.Sortable) {
-            resolve(window.Sortable);
-            return;
-          }
-          
-          const script = document.createElement('script');
-          script.src = 'https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js';
-          script.async = true;
-          script.onload = () => resolve(window.Sortable);
-          script.onerror = reject;
-          document.head.appendChild(script);
-        });
+        return window.Sortable
+          ? Promise.resolve(window.Sortable)
+          : Promise.reject(new Error('Sortable local nÃ£o carregado.'));
       }
 
       // Função para inicializar a ordenação das listas
@@ -4057,6 +4597,100 @@
         }
       }
 
+      function destroyTaskSortables(){
+        try{ if(activeSortable && activeSortable.el){ activeSortable.destroy(); } }catch(_){ }
+        try{ if(completedSortable && completedSortable.el){ completedSortable.destroy(); } }catch(_){ }
+        groupSortables.forEach((sortable)=>{ try{ if(sortable && sortable.el){ sortable.destroy(); } }catch(_){ } });
+        activeSortable = null;
+        completedSortable = null;
+        groupSortables = [];
+      }
+
+      function rebuildActiveOrderFromDom(list){
+        if(!list){ return; }
+        const visibleTasks = getVisibleTasks(list);
+        const activeMap = new Map(visibleTasks.filter((task)=> !task.done).map((task)=> [task.id, task]));
+        const doneTasks = visibleTasks.filter((task)=> task.done);
+        const orderedActive = [];
+        document.querySelectorAll('#tasksContainer .task').forEach((element)=>{
+          const task = activeMap.get(element.dataset.id);
+          if(task && !orderedActive.includes(task)){
+            orderedActive.push(task);
+          }
+        });
+        rebuildTaskArrayAfterReorder(list, [...orderedActive, ...doneTasks]);
+        updateLocalOrderForList(list.id);
+        saveState();
+        requestSync(list.id);
+      }
+
+      function rebuildDoneOrderFromDom(list){
+        if(!list){ return; }
+        const visibleTasks = getVisibleTasks(list);
+        const activeTasks = visibleTasks.filter((task)=> !task.done);
+        const doneMap = new Map(visibleTasks.filter((task)=> task.done).map((task)=> [task.id, task]));
+        const orderedDone = [];
+        document.querySelectorAll('#completedList .task').forEach((element)=>{
+          const task = doneMap.get(element.dataset.id);
+          if(task && !orderedDone.includes(task)){
+            orderedDone.push(task);
+          }
+        });
+        rebuildTaskArrayAfterReorder(list, [...activeTasks, ...orderedDone]);
+        updateLocalOrderForList(list.id);
+        saveState();
+        requestSync(list.id);
+      }
+
+      async function initSortableTasksV2() {
+        try {
+          const Sortable = await loadSortableJS();
+          const list = lists.find((entry)=> entry && entry.id===currentListId);
+          if(!list){ return; }
+          destroyTaskSortables();
+          const commonConfig = {
+            animation: 160,
+            delay: 180,
+            delayOnTouchOnly: true,
+            touchStartThreshold: 3,
+            handle: '.drag-handle',
+            filter: '.checkbox-round',
+            ghostClass: 'sortable-ghost',
+            chosenClass: 'sortable-chosen',
+            dragClass: 'sortable-drag'
+          };
+
+          if(tasksContainer && tasksContainer.children.length > 1){
+            activeSortable = new Sortable(tasksContainer, {
+              ...commonConfig,
+              onEnd: ()=> rebuildActiveOrderFromDom(list)
+            });
+          }
+
+          if(completedList && completedList.children.length > 0){
+            completedSortable = new Sortable(completedList, {
+              ...commonConfig,
+              onEnd: ()=> rebuildDoneOrderFromDom(list)
+            });
+          }
+
+          document.querySelectorAll('.task-group').forEach((groupEl)=>{
+            try{
+              const isDoneGroup = !!groupEl.closest('#completedList');
+              const sortable = new Sortable(groupEl, {
+                ...commonConfig,
+                onEnd: ()=>{ if(isDoneGroup){ rebuildDoneOrderFromDom(list); } else { rebuildActiveOrderFromDom(list); } }
+              });
+              groupSortables.push(sortable);
+            }catch(error){
+              console.error('Erro ao inicializar Sortable para grupo:', error);
+            }
+          });
+        } catch (error) {
+          console.error('Erro ao inicializar Sortable v2 para tarefas:', error);
+        }
+      }
+
       if(globalBackBtn){
         globalBackBtn.addEventListener('click', ()=>{
           try{ window.history.back(); }catch(_){ }
@@ -4065,8 +4699,21 @@
       window.addEventListener('popstate', handlePopState);
       initHistory();
       preventNativeZoom();
+      if(themeMediaQuery){
+        const syncThemeFromSystem = ()=>{
+          if(normalizeThemePreference(themePreference) === 'system'){
+            applyTheme('system');
+          }
+        };
+        if(typeof themeMediaQuery.addEventListener === 'function'){
+          themeMediaQuery.addEventListener('change', syncThemeFromSystem);
+        } else if(typeof themeMediaQuery.addListener === 'function'){
+          themeMediaQuery.addListener(syncThemeFromSystem);
+        }
+      }
 
       // initial load
+      loadThemePreference();
       loadState();
       loadPhotoSyncState();
       loadCompletedCollapseState();

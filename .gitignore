@@ -1,5 +1,6 @@
 # Cursor IDE
 .cursor
+.agent
 /node_modules
 /report
 /data

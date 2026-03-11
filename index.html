@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#000000" />
+  <meta name="theme-color" content="#F3F4F6" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>To‑Do List</title>
@@ -12,7 +12,21 @@
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
   <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="style.css?v=1.0.1" />
+  <script>
+    (function(){
+      try{
+        var pref = localStorage.getItem('todo_theme_preference_v1') || 'system';
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var isDark = pref === 'dark' || (pref === 'system' && prefersDark);
+        if(isDark){
+          document.documentElement.classList.add('dark');
+          var themeMeta = document.querySelector('meta[name="theme-color"]');
+          if(themeMeta){ themeMeta.setAttribute('content', '#05080C'); }
+        }
+      }catch(_){ }
+    })();
+  </script>
+  <link rel="stylesheet" href="style.css?v=1.0.5" />
   <!-- Google tag (gtag.js) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-E132M7DYY4"></script>
   <script>
@@ -42,6 +56,8 @@
         </button>
         <button id="appMenuBtn" class="icon-btn" type="button" aria-label="Mais opções" aria-haspopup="true" aria-expanded="false" hidden>⋮</button>
         <div id="appMenu" class="app-menu" role="menu" hidden>
+          <button id="selectTasksAction" class="app-menu-item" type="button" role="menuitem">Selecionar tarefas</button>
+          <button id="themeToggleAction" class="app-menu-item" type="button" role="menuitem">Tema: Sistema</button>
           <button id="shareListAction" class="app-menu-item" type="button" role="menuitem">Compartilhar lista</button>
           <button id="resetAppAction" class="app-menu-item" type="button" role="menuitem">Resetar app</button>
           <button id="deleteListAction" class="app-menu-item" type="button" role="menuitem">Excluir Lista</button>
@@ -80,6 +96,14 @@
         </div>
       </div>
 
+      <div id="selectionToolbar" class="selection-toolbar" hidden aria-live="polite">
+        <div id="selectionCount" class="selection-count">0 itens</div>
+        <div class="selection-actions">
+          <button id="groupSelectionButton" class="btn primary" type="button" disabled>Agrupar</button>
+          <button id="ungroupSelectionButton" class="btn" type="button" disabled>Separar</button>
+          <button id="cancelSelectionButton" class="btn" type="button">Cancelar</button>
+        </div>
+      </div>
       <div class="tasks" id="tasksContainer" aria-live="polite"></div>
 
       <!-- completed group -->
@@ -96,11 +120,6 @@
       <button id="openComposer" class="fab" aria-label="Adicionar">+</button>
       
       <!-- Lixeira para exclusão por drag and drop -->
-      <div id="trashZone" class="trash-zone" hidden aria-label="Arrastar aqui para excluir">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" fill="currentColor"/>
-        </svg>
-      </div>
     </section>
 
     <!-- Screen: Task Detail -->
@@ -165,14 +184,8 @@
       <div class="modal" role="document">
         <h3 id="codeModalTitle">Código</h3>
         <div class="modal-body">
-          <div class="code-inputs" role="group" aria-label="Código de 6 dígitos">
-            <input class="code-input" inputmode="latin" autocomplete="one-time-code" aria-label="Dígito 1" maxlength="1" />
-            <input class="code-input" inputmode="latin" autocomplete="one-time-code" aria-label="Dígito 2" maxlength="1" />
-            <input class="code-input" inputmode="latin" autocomplete="one-time-code" aria-label="Dígito 3" maxlength="1" />
-            <span class="code-gap" aria-hidden="true" style="width:10px"></span>
-            <input class="code-input" inputmode="latin" autocomplete="one-time-code" aria-label="Dígito 4" maxlength="1" />
-            <input class="code-input" inputmode="latin" autocomplete="one-time-code" aria-label="Dígito 5" maxlength="1" />
-            <input class="code-input" inputmode="latin" autocomplete="one-time-code" aria-label="Dígito 6" maxlength="1" />
+          <div class="code-inputs" role="group" aria-label="Código de 6 caracteres">
+            <input id="codeInputField" class="code-input-single" type="text" inputmode="text" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" aria-label="Código da lista" placeholder="ABC 123" maxlength="7" />
           </div>
         </div>
         <div class="actions">
@@ -843,6 +856,7 @@
     }catch(_){ }
   </script>
   
-  <script src="script.js?v=1.1.0"></script>
+  <script src="vendor/sortable.min.js?v=1.15.0"></script>
+  <script src="script.js?v=1.2.4"></script>
 </body>
 </html>
