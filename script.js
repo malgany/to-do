@@ -266,8 +266,73 @@
         gallery: createHiddenPhotoInput({})
       };
       let activePhotoId = null;
+      const PHOTO_SYNC_STATE_STORAGE_KEY = 'todo_photo_sync_state_v1';
       const pendingPhotoIdsByListTask = Object.create(null);
       const removedPhotoIdsByListTask = Object.create(null);
+
+      function serializePhotoSyncMap(source){
+        const out = Object.create(null);
+        Object.keys(source || {}).forEach((listId)=>{
+          const perList = source[listId];
+          if(!perList || typeof perList !== 'object'){ return; }
+          const serializedList = Object.create(null);
+          Object.keys(perList).forEach((taskId)=>{
+            const set = perList[taskId];
+            if(!set || typeof set.forEach !== 'function' || set.size===0){ return; }
+            const ids = [];
+            set.forEach((id)=>{
+              try{
+                const normalized = String(id);
+                if(normalized){ ids.push(normalized); }
+              }catch(_){ }
+            });
+            if(ids.length){ serializedList[taskId] = ids; }
+          });
+          if(Object.keys(serializedList).length){ out[listId] = serializedList; }
+        });
+        return out;
+      }
+
+      function restorePhotoSyncMap(target, raw){
+        if(!raw || typeof raw !== 'object'){ return; }
+        Object.keys(raw).forEach((listId)=>{
+          const perList = raw[listId];
+          if(!perList || typeof perList !== 'object'){ return; }
+          const restoredList = Object.create(null);
+          Object.keys(perList).forEach((taskId)=>{
+            const ids = Array.isArray(perList[taskId]) ? perList[taskId] : [];
+            const set = new Set();
+            ids.forEach((id)=>{
+              try{
+                const normalized = String(id);
+                if(normalized){ set.add(normalized); }
+              }catch(_){ }
+            });
+            if(set.size){ restoredList[taskId] = set; }
+          });
+          if(Object.keys(restoredList).length){ target[listId] = restoredList; }
+        });
+      }
+
+      function savePhotoSyncState(){
+        try{
+          const payload = {
+            pending: serializePhotoSyncMap(pendingPhotoIdsByListTask),
+            removed: serializePhotoSyncMap(removedPhotoIdsByListTask)
+          };
+          localStorage.setItem(PHOTO_SYNC_STATE_STORAGE_KEY, JSON.stringify(payload));
+        }catch(_){ }
+      }
+
+      function loadPhotoSyncState(){
+        try{
+          const raw = localStorage.getItem(PHOTO_SYNC_STATE_STORAGE_KEY);
+          if(!raw){ return; }
+          const parsed = JSON.parse(raw);
+          restorePhotoSyncMap(pendingPhotoIdsByListTask, parsed && parsed.pending);
+          restorePhotoSyncMap(removedPhotoIdsByListTask, parsed && parsed.removed);
+        }catch(_){ }
+      }
 
       function getPendingPhotoSet(listId, taskId, createIfMissing){
         if(!listId || !taskId){ return null; }
@@ -295,6 +360,7 @@
           if(set && set.size===0){ delete perList[taskId]; }
         }
         if(Object.keys(perList).length===0){ delete pendingPhotoIdsByListTask[listId]; }
+        savePhotoSyncState();
       }
 
       function getRemovedPhotoSet(listId, taskId, createIfMissing){
@@ -323,6 +389,7 @@
           if(set && set.size===0){ delete perList[taskId]; }
         }
         if(Object.keys(perList).length===0){ delete removedPhotoIdsByListTask[listId]; }
+        savePhotoSyncState();
       }
 
       function markRemovedPhoto(listId, taskId, photoId){
@@ -331,6 +398,7 @@
         if(!set){ return; }
         try{ set.add(String(photoId)); }
         catch(_){ }
+        savePhotoSyncState();
       }
 
       function clearRemovedPhotos(listId, taskId, photoIds){
@@ -355,6 +423,7 @@
         if(!listId){ return; }
         if(removedPhotoIdsByListTask[listId]){
           delete removedPhotoIdsByListTask[listId];
+          savePhotoSyncState();
         }
       }
 
@@ -374,6 +443,7 @@
           if(set && set.size===0){ delete perList[taskId]; }
         });
         if(Object.keys(perList).length===0){ delete removedPhotoIdsByListTask[list.id]; }
+        savePhotoSyncState();
       }
 
       function markPendingPhotos(listId, taskId, photos){
@@ -390,6 +460,7 @@
         const set = getPendingPhotoSet(listId, taskId, true);
         if(!set){ return; }
         ids.forEach((id)=> set.add(id));
+        savePhotoSyncState();
       }
 
       function clearPendingPhotos(listId, taskId, photoIds){
@@ -414,6 +485,7 @@
         if(!listId){ return; }
         if(pendingPhotoIdsByListTask[listId]){
           delete pendingPhotoIdsByListTask[listId];
+          savePhotoSyncState();
         }
       }
 
@@ -433,6 +505,7 @@
           if(set && set.size===0){ delete perList[taskId]; }
         });
         if(Object.keys(perList).length===0){ delete pendingPhotoIdsByListTask[list.id]; }
+        savePhotoSyncState();
       }
 
       // interaction guards
@@ -629,19 +702,13 @@
           const wait = typeof delayMs === 'number' ? Math.max(0, delayMs) : 250;
           if(syncTimers[listId]){ clearTimeout(syncTimers[listId]); }
           syncTimers[listId] = setTimeout(async ()=>{
-            let published = false;
             try{
               const code = String(list.shareCode||'').replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
               list._lastPushedAt = Date.now();
               const payload = buildSyncPayload(list);
               await window.firebaseShareList(code, payload);
-              published = true;
             }catch(e){ /* ignore sync errors */ }
             finally{
-              if(published){
-                clearPendingPhotosForList(listId);
-                clearRemovedPhotosForList(listId);
-              }
               syncTimers[listId] = null;
             }
           }, wait);
@@ -669,7 +736,9 @@
             if(!remote) return;
             const pushedAt = list._lastPushedAt || 0;
             const remoteAt = (remote && remote.updatedAt) ? Number(remote.updatedAt) : 0;
-            if(remoteAt && pushedAt && Math.abs(remoteAt - pushedAt) < 600){ return; }
+            const lastRemoteAt = list._lastRemoteAt || 0;
+            if(remoteAt && lastRemoteAt && remoteAt < lastRemoteAt){ return; }
+            if(remoteAt && pushedAt && remoteAt < pushedAt){ return; }
             const newTitle = remote.title || 'Lista';
             const incoming = Array.isArray(remote.tasks)
               ? remote.tasks.map((task)=> normalizeIncomingTaskData(task))
@@ -697,6 +766,7 @@
               ...indexedDone.map((x)=> x.t)
             ];
             const mergedTasks = mergeIncomingTasks(list, orderedIncoming);
+            if(remoteAt){ list._lastRemoteAt = remoteAt; }
             list.title = newTitle;
             list.tasks = mergedTasks;
             reconcilePendingPhotosForList(list);
@@ -1272,6 +1342,8 @@
         const removedSet = (listId && taskId)
           ? getRemovedPhotoSet(listId, taskId, false)
           : null;
+        const remoteIds = new Set(remoteList.map((photo)=> photo && photo.id).filter(Boolean));
+        const localIds = new Set(localList.map((photo)=> photo && photo.id).filter(Boolean));
         const filteredRemote = removedSet
           ? remoteList.filter((photo)=> photo && !removedSet.has(photo.id))
           : remoteList;
@@ -1283,36 +1355,33 @@
           }
         });
         if(pendingSet){
-          if(pendingSet.size){
-            localList.forEach((photo)=>{
-              if(photo && pendingSet.has(photo.id) && !seen.has(photo.id)){
-                combined.push(photo);
-                seen.add(photo.id);
-              }
-            });
-            const availableLocalIds = new Set(localList.map((photo)=> photo.id));
-            const toRemove = [];
-            pendingSet.forEach((id)=>{
-              if(!availableLocalIds.has(id)){
-                toRemove.push(id);
-              }
-            });
-            if(toRemove.length){ toRemove.forEach((id)=> pendingSet.delete(id)); }
-          }
-          cleanupPendingPhotoEntry(listId, taskId);
-          if(removedSet && filteredRemote.length){
-            filteredRemote.forEach((photo)=>{ try{ removedSet.delete(photo.id); }catch(_){ } });
-            cleanupRemovedPhotoEntry(listId, taskId);
-          }
-        } else {
           localList.forEach((photo)=>{
-            if(photo && !seen.has(photo.id)){
+            if(photo && pendingSet.has(photo.id) && !seen.has(photo.id)){
               combined.push(photo);
               seen.add(photo.id);
             }
           });
+          if(pendingSet.size){
+            const settledPending = [];
+            pendingSet.forEach((id)=>{
+              if(remoteIds.has(id) || !localIds.has(id)){
+                settledPending.push(id);
+              }
+            });
+            if(settledPending.length){ clearPendingPhotos(listId, taskId, settledPending); }
+          }
+          cleanupPendingPhotoEntry(listId, taskId);
         }
-        if(removedSet && !filteredRemote.length){ cleanupRemovedPhotoEntry(listId, taskId); }
+        if(removedSet && removedSet.size){
+          const settledRemoved = [];
+          removedSet.forEach((id)=>{
+            if(!remoteIds.has(id)){
+              settledRemoved.push(id);
+            }
+          });
+          if(settledRemoved.length){ clearRemovedPhotos(listId, taskId, settledRemoved); }
+          cleanupRemovedPhotoEntry(listId, taskId);
+        }
         return combined.slice(0, MAX_PHOTOS_PER_TASK);
       }
 
@@ -3097,6 +3166,7 @@
 
       // initial load
       loadState();
+      loadPhotoSyncState();
       loadCompletedCollapseState();
       loadLocalOrderState();
       renderLists();
