@@ -503,8 +503,7 @@ button.btn:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 .share-instructions{color:var(--muted);font-size:var(--fs-sm)}
 .share-code-row{display:flex;align-items:center;justify-content:center;gap:var(--space-3)}
 .share-code{font-weight:700;font-size:32px;letter-spacing:6px;color:var(--text)}
-.copy-btn{border:1px solid var(--border);background:var(--bg);padding:10px;border-radius:12px;color:var(--text)}
-.copy-btn svg{width:20px;height:20px}
+.copy-btn{border:1px solid var(--border);background:var(--bg);color:var(--text);white-space:nowrap}
 .share-feedback{min-height:18px;font-size:13px;color:#047857}
 .share-feedback.error{color:#B91C1C}
 .share-close{align-self:center}

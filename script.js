@@ -13,6 +13,7 @@
       const SYNC_OUTBOX_STORAGE_KEY = 'todo_sync_outbox_v1';
       const CLIENT_ID_STORAGE_KEY = 'todo_client_id_v1';
       const SHARED_SCHEMA_VERSION = 2;
+      const PUBLIC_SHARE_BASE_URL = 'https://malgany.github.io/to-do';
       let completedCollapseByList = {};
       let localOrderByList = {};
       let syncOutboxByList = {};
@@ -2584,6 +2585,39 @@
         return String(value || '').toUpperCase().replace(/[^0-9A-Z]/g,'').slice(0,6);
       }
 
+      function buildShareLink(code){
+        const normalized = normalizeCodeValue(code);
+        return `${PUBLIC_SHARE_BASE_URL}?lista-${normalized}`;
+      }
+
+      function buildShareClipboardText(code){
+        const normalized = normalizeCodeValue(code);
+        return `${normalized}\n${buildShareLink(normalized)}`;
+      }
+
+      function getShareCodeFromUrl(){
+        try{
+          const search = String(window.location.search || '').replace(/^\?/, '');
+          const hash = String(window.location.hash || '').replace(/^#/, '');
+          const candidates = [search, hash];
+          const params = new URLSearchParams(window.location.search || '');
+          ['lista', 'list', 'code', 'codigo'].forEach((key)=>{
+            const value = params.get(key);
+            if(value){ candidates.push(value); }
+          });
+          for(const candidate of candidates){
+            const raw = String(candidate || '');
+            const match = raw.match(/(?:^|[?&#])(?:lista|list|code|codigo)[-=_]?([0-9a-z]{6})(?:$|[&#])/i)
+              || raw.match(/^([0-9a-z]{6})$/i);
+            if(match){
+              const normalized = normalizeCodeValue(match[1]);
+              if(normalized.length === 6){ return normalized; }
+            }
+          }
+        }catch(_){ }
+        return '';
+      }
+
       function getCodeInputValue(){
         return normalizeCodeValue(codeInputField ? codeInputField.value : '');
       }
@@ -2712,17 +2746,15 @@
 
       async function attemptCopyShareCode(){
         if(!activeShareCode) return;
-        const formatted = formatDisplayCode(activeShareCode);
+        const shareText = buildShareClipboardText(activeShareCode);
         
         const onCopyOk = ()=> {
-          const list = lists.find(x=>x.id===currentListId);
-          const isNewlyShared = list && list.shareCreated === true;
-          notifyCopyFeedback('Código copiado!', false);
+          notifyCopyFeedback('Link copiado!', false);
         };
         if(navigator.clipboard && navigator.clipboard.writeText){
-          navigator.clipboard.writeText(formatted).then(onCopyOk).catch(()=>{ legacyCopy(formatted); });
+          navigator.clipboard.writeText(shareText).then(onCopyOk).catch(()=>{ legacyCopy(shareText); });
         } else {
-          legacyCopy(formatted);
+          legacyCopy(shareText);
         }
       }
 
@@ -2954,6 +2986,89 @@
         codeBackdrop.style.display='none';
         clearKeyboardInset();
         unlockScroll();
+      }
+
+      async function importSharedListByCode(code, options){
+        const opts = Object.assign({ showErrors:true, closeImporter:false }, options||{});
+        const normalized = normalizeCodeValue(code);
+        if(normalized.length !== 6){
+          if(opts.showErrors){ showToast('Informe um código de 6 caracteres.', { type: 'error' }); }
+          return null;
+        }
+        const existing = lists.find((entry)=> entry && normalizeCodeValue(entry.shareCode) === normalized);
+        if(existing){
+          if(opts.closeImporter){ closeCodeModal(); }
+          openList(existing.id);
+          startRealtimeForList(existing.id);
+          return existing;
+        }
+        if(typeof window === 'undefined' || typeof window.firebaseGetList !== 'function'){
+          if(opts.showErrors){ showToast('Importação indisponível no momento.', { type: 'error' }); }
+          return null;
+        }
+        const remote = await window.firebaseGetList(normalized);
+        if(!remote){
+          if(opts.showErrors){ showToast('Código não encontrado.', { type: 'error' }); }
+          return null;
+        }
+        const id = 'l_'+Date.now();
+        const title = remote.title || 'Lista Importada';
+        const tasks = [];
+        if(Array.isArray(remote.tasks)){
+          remote.tasks.forEach((t)=>{
+            const normalizedTask = normalizeIncomingTaskData(t);
+            const task = normalizedTask ? JSON.parse(JSON.stringify(normalizedTask)) : null;
+            if(!task){ return; }
+            ensureTaskStructure(task);
+            tasks.push(task);
+          });
+        }
+        const newList = {
+          id,
+          title,
+          tasks,
+          shareCode: normalized,
+          imported: true,
+          shareCreated: true,
+          metaUpdatedAt: normalizeTimestamp(remote.updatedAt, nowTs()),
+          metaUpdatedBy: normalizeActor(remote.updatedBy, clientId),
+          clientId
+        };
+        ensureListStructure(newList);
+        lists.push(newList);
+        saveState();
+        renderLists();
+        if(opts.closeImporter){ closeCodeModal(); }
+        openList(id);
+        startRealtimeForList(id);
+        return newList;
+      }
+
+      let urlImportInProgress = false;
+      async function handleSharedListUrl(){
+        const code = getShareCodeFromUrl();
+        if(!code || urlImportInProgress){ return; }
+        const existing = lists.find((entry)=> entry && normalizeCodeValue(entry.shareCode) === code);
+        if(existing){
+          openList(existing.id);
+          startRealtimeForList(existing.id);
+          return;
+        }
+        if(typeof window === 'undefined' || typeof window.firebaseGetList !== 'function'){
+          try{
+            window.addEventListener('firebase-ready', handleSharedListUrl, { once:true });
+          }catch(_){ }
+          return;
+        }
+        urlImportInProgress = true;
+        try{
+          const imported = await importSharedListByCode(code, { showErrors:true });
+          if(imported){ showToast('Lista importada pelo link.', { type: 'success' }); }
+        }catch(_){
+          showToast('Ocorreu um erro ao importar pelo link.', { type: 'error' });
+        }finally{
+          urlImportInProgress = false;
+        }
       }
 
       function onModalInput(){ modalPrimary.disabled = listNameInput.value.trim().length===0; }
@@ -3960,47 +4075,12 @@
               setTimeout(()=>{ if(codeInputField) codeInputField.focus(); }, 150);
               return;
             }
-            if(typeof window === 'undefined' || typeof window.firebaseGetList !== 'function'){
-              updateCodeImportState();
-              showToast('Importação indisponível no momento.', { type: 'error' });
-              setTimeout(()=>{ if(codeInputField) codeInputField.focus(); }, 150);
-              return;
-            }
             codeImport.disabled = true;
-            const remote = await window.firebaseGetList(normalized);
+            const importedList = await importSharedListByCode(normalized, { closeImporter:true });
             updateCodeImportState();
-            if(!remote){
-              showToast('Código não encontrado.', { type: 'error' });
+            if(!importedList){
               setTimeout(()=>{ if(codeInputField) codeInputField.focus(); }, 150);
-              return;
             }
-            const id = 'l_'+Date.now();
-            const title = remote.title || 'Lista Importada';
-            const tasks = [];
-            if(Array.isArray(remote.tasks)){
-              remote.tasks.forEach((t)=>{
-                const normalizedTask = normalizeIncomingTaskData(t);
-                const task = normalizedTask ? JSON.parse(JSON.stringify(normalizedTask)) : null;
-                if(!task){ return; }
-                ensureTaskStructure(task);
-                tasks.push(task);
-              });
-            }
-            const newList = {
-              id,
-              title,
-              tasks,
-              shareCode: normalized,
-              imported: true,
-              shareCreated: true,
-              metaUpdatedAt: normalizeTimestamp(remote.updatedAt, nowTs()),
-              metaUpdatedBy: normalizeActor(remote.updatedBy, clientId),
-              clientId
-            };
-            ensureListStructure(newList);
-            lists.push(newList);
-            saveState(); renderLists(); closeCodeModal(); openList(id);
-            startRealtimeForList(id);
           }catch(e){
             try{ updateCodeImportState(); }catch(_){ }
             showToast('Ocorreu um erro ao importar.', { type: 'error' });
@@ -4722,6 +4802,7 @@
       updateSubtitle();
       updateAppBar(screenLists);
       startRealtimeForExistingLists();
+      handleSharedListUrl();
       try{
         if(typeof window !== 'undefined' && !window.firebaseReady){
           window.addEventListener('firebase-ready', startRealtimeForExistingLists, { once: true });
