@@ -587,6 +587,14 @@
         }catch(_){ }
       }
 
+      function lockPortraitOrientation(){
+        try{
+          const orientation = window.screen && window.screen.orientation;
+          if(!orientation || typeof orientation.lock !== 'function'){ return; }
+          orientation.lock('portrait-primary').catch(()=>{});
+        }catch(_){ }
+      }
+
       const SCREEN_KEYS = Object.freeze({
         LISTS: 'lists',
         LIST_DETAIL: 'listDetail',
@@ -4779,6 +4787,7 @@
       window.addEventListener('popstate', handlePopState);
       initHistory();
       preventNativeZoom();
+      lockPortraitOrientation();
       if(themeMediaQuery){
         const syncThemeFromSystem = ()=>{
           if(normalizeThemePreference(themePreference) === 'system'){
