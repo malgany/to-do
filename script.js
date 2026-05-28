@@ -2895,13 +2895,23 @@
         return `${count} ${count === 1 ? 'tarefa' : 'tarefas'}`;
       }
 
-      const LIST_INITIAL_COLOR_CLASSES = [
-        'list-initial-blue',
-        'list-initial-purple',
-        'list-initial-green',
-        'list-initial-amber',
-        'list-initial-rose',
-        'list-initial-cyan'
+      const LIST_INITIAL_GRADIENT_COLORS = [
+        '#2563EB',
+        '#7C3AED',
+        '#EC4899',
+        '#F97316',
+        '#FACC15',
+        '#22C55E',
+        '#14B8A6',
+        '#06B6D4',
+        '#60A5FA',
+        '#A78BFA',
+        '#F472B6',
+        '#FDBA74',
+        '#FDE68A',
+        '#86EFAC',
+        '#67E8F9',
+        '#F87171'
       ];
 
       function getListInitials(title){
@@ -2921,13 +2931,69 @@
         return `${first}${second}`;
       }
 
-      function getListInitialColorClass(title){
-        const normalized = normalizeListMatchText(title);
+      function getStableHash(value){
+        const normalized = normalizeListMatchText(value);
         let hash = 0;
         for(let index = 0; index < normalized.length; index += 1){
           hash = (hash * 31 + normalized.charCodeAt(index)) >>> 0;
         }
-        return LIST_INITIAL_COLOR_CLASSES[hash % LIST_INITIAL_COLOR_CLASSES.length];
+        return hash;
+      }
+
+      function hexToRgb(hex){
+        const value = String(hex || '').replace('#', '');
+        if(value.length !== 6){ return { r:0, g:0, b:0 }; }
+        return {
+          r: parseInt(value.slice(0, 2), 16),
+          g: parseInt(value.slice(2, 4), 16),
+          b: parseInt(value.slice(4, 6), 16)
+        };
+      }
+
+      function getRelativeLuminance(hex){
+        const rgb = hexToRgb(hex);
+        const channels = [rgb.r, rgb.g, rgb.b].map((channel)=>{
+          const value = channel / 255;
+          return value <= 0.03928 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
+        });
+        return (0.2126 * channels[0]) + (0.7152 * channels[1]) + (0.0722 * channels[2]);
+      }
+
+      function getListInitialGradientConfig(list, index){
+        const seed = `${list && list.id ? list.id : index}|${list && list.title ? list.title : ''}`;
+        const hash = getStableHash(seed);
+        const palette = LIST_INITIAL_GRADIENT_COLORS;
+        const colorCount = 2 + (hash % 2);
+        const colors = [];
+        let cursor = hash % palette.length;
+        let step = ((hash >>> 5) % (palette.length - 1)) + 1;
+        if(step % 2 === 0){ step += 1; }
+        while(colors.length < colorCount){
+          const color = palette[cursor % palette.length];
+          if(!colors.includes(color)){ colors.push(color); }
+          cursor += step;
+        }
+        const angle = 120 + (hash % 61);
+        const stops = colors.length === 2
+          ? `${colors[0]} 0%, ${colors[1]} 100%`
+          : `${colors[0]} 0%, ${colors[1]} 52%, ${colors[2]} 100%`;
+        const luminance = colors.reduce((sum, color)=> sum + getRelativeLuminance(color), 0) / colors.length;
+        const isLight = luminance >= 0.48;
+        return {
+          background: `linear-gradient(${angle}deg, ${stops})`,
+          color: isLight ? '#111827' : '#FFFFFF',
+          shadow: isLight ? '0 1px 0 rgba(255,255,255,0.55)' : '0 1px 2px rgba(0,0,0,0.28)',
+          ring: isLight ? 'inset 0 0 0 1px rgba(15,23,42,0.04)' : 'inset 0 0 0 1px rgba(255,255,255,0.20)'
+        };
+      }
+
+      function applyListInitialGradient(element, list, index){
+        if(!element){ return; }
+        const config = getListInitialGradientConfig(list, index);
+        element.style.setProperty('--list-initial-gradient', config.background);
+        element.style.setProperty('--list-initial-color', config.color);
+        element.style.setProperty('--list-initial-shadow', config.shadow);
+        element.style.setProperty('--list-initial-ring', config.ring);
       }
 
       const TASK_FILTERS = [
@@ -3133,9 +3199,10 @@
           bodyButton.setAttribute('aria-label', `Abrir lista ${l.title}, ${formatListTaskCount(totalTasks)}`);
 
           const ico = document.createElement('div');
-          ico.className=`list-icon list-initial ${getListInitialColorClass(l.title)}`;
+          ico.className='list-icon list-initial';
           ico.setAttribute('aria-hidden', 'true');
           ico.textContent = getListInitials(l.title);
+          applyListInitialGradient(ico, l, index);
 
           const content = document.createElement('div');
           content.className = 'list-card-content';
