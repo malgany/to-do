@@ -989,10 +989,10 @@ html:not(.dark) #screenTaskDetail.screen{
   margin-top:var(--space-3);
   margin-bottom:var(--space-3);
   padding:12px 14px;
-  border:1px solid rgba(47,115,246,0.22);
+  border:1px solid rgba(245,158,11,0.30);
   border-radius:14px;
-  background:#F4F8FF;
-  box-shadow:0 8px 22px rgba(47,115,246,0.08);
+  background:linear-gradient(135deg,#FFF7ED 0%,#FEF3C7 100%);
+  box-shadow:0 8px 22px rgba(245,158,11,0.12);
 }
 .selection-toolbar[hidden]{display:none !important}
 .selection-count{
@@ -1000,7 +1000,7 @@ html:not(.dark) #screenTaskDetail.screen{
   font-weight:700;
   font-size:15px;
   line-height:1.2;
-  color:var(--brand-700);
+  color:#92400E;
   white-space:nowrap;
 }
 .selection-actions{
@@ -1015,6 +1015,27 @@ html:not(.dark) #screenTaskDetail.screen{
   padding:0 14px;
   font-size:14px;
   white-space:nowrap;
+}
+.selection-actions .btn:not(:disabled){
+  border-color:transparent;
+  background:linear-gradient(135deg,#FDE68A 0%,#F59E0B 48%,#F97316 100%);
+  color:#111827;
+  box-shadow:0 8px 18px rgba(245,158,11,0.18);
+}
+.selection-actions .btn:not(:disabled):hover{
+  background:linear-gradient(135deg,#FCD34D 0%,#F59E0B 50%,#EA580C 100%);
+  color:#111827;
+  border-color:transparent;
+}
+.selection-actions .btn:disabled{
+  background:rgba(255,247,237,0.72);
+  border-color:#FED7AA;
+  color:#B45309;
+}
+.selection-toolbar:not([hidden]) ~ #tasksContainer .task-group{
+  border-color:#F59E0B;
+  background:linear-gradient(135deg,rgba(255,247,237,0.92) 0%,rgba(254,243,199,0.82) 100%);
+  box-shadow:0 8px 22px rgba(245,158,11,0.10);
 }
 
 .task{
@@ -1045,13 +1066,17 @@ html:not(.dark) #screenTaskDetail.screen{
 }
 .task:hover .task-body{background:var(--card-hover)}
 .task.selected .task-body{
-  border-color:var(--brand);
-  background:var(--brand-50);
-  box-shadow:0 0 0 1px rgba(37,99,235,0.18);
+  border-color:#F59E0B;
+  background:linear-gradient(135deg,#FFF7ED 0%,#FFFBEB 100%);
+  box-shadow:0 0 0 1px rgba(245,158,11,0.22);
 }
-.task.selected .checkbox-round{
-  border-color:var(--brand);
-  background:var(--brand);
+.selection-checkbox{
+  border-color:#F59E0B;
+  color:#F59E0B;
+}
+.task.selected .selection-checkbox{
+  border-color:#F59E0B;
+  background:linear-gradient(135deg,#FDE68A 0%,#F59E0B 58%,#F97316 100%);
   color:#fff;
 }
 .task.swipe-anim .task-body,
@@ -1284,13 +1309,17 @@ html:not(.dark) body.list-detail-screen-active .task.done .task-body .text{
   text-decoration:none;
 }
 html:not(.dark) body.list-detail-screen-active .task.selected .task-body{
-  border-color:#2F73F6;
-  background:#EAF2FF;
-  box-shadow:0 10px 24px rgba(47,115,246,0.15), 0 0 0 1px rgba(47,115,246,0.20);
+  border-color:#F59E0B;
+  background:linear-gradient(135deg,#FFF7ED 0%,#FFFBEB 100%);
+  box-shadow:0 10px 24px rgba(245,158,11,0.14), 0 0 0 1px rgba(245,158,11,0.22);
 }
-html:not(.dark) body.list-detail-screen-active .task.selected .checkbox-round{
-  border-color:#2F73F6;
-  background:#2F73F6;
+html:not(.dark) body.list-detail-screen-active .selection-checkbox{
+  border-color:#F59E0B;
+  color:#F59E0B;
+}
+html:not(.dark) body.list-detail-screen-active .task.selected .selection-checkbox{
+  border-color:#F59E0B;
+  background:linear-gradient(135deg,#FDE68A 0%,#F59E0B 58%,#F97316 100%);
   color:#fff;
 }
 .task-priority{
@@ -1544,9 +1573,18 @@ html:not(.dark) body.list-detail-screen-active .tasks-empty-state{
   background:#3B82F6;
 }
 .dark body.list-detail-screen-active .task.selected .task-body{
-  border-color:#60A5FA;
-  background:#10264A;
-  box-shadow:0 12px 26px rgba(59,130,246,0.18), 0 0 0 1px rgba(96,165,250,0.18);
+  border-color:#F59E0B;
+  background:linear-gradient(135deg,#2A1A0A 0%,#1B2430 100%);
+  box-shadow:0 12px 26px rgba(245,158,11,0.14), 0 0 0 1px rgba(251,191,36,0.18);
+}
+.dark body.list-detail-screen-active .selection-checkbox{
+  border-color:#F59E0B;
+  color:#FBBF24;
+}
+.dark body.list-detail-screen-active .task.selected .selection-checkbox{
+  border-color:#F59E0B;
+  background:linear-gradient(135deg,#FDE68A 0%,#F59E0B 58%,#F97316 100%);
+  color:#111827;
 }
 .dark body.list-detail-screen-active .drag-handle{
   width:32px;
@@ -1569,25 +1607,30 @@ html:not(.dark) body.list-detail-screen-active .tasks-empty-state{
 }
 
 .dark .selection-toolbar{
-  border-color:#27466F;
-  background:#0F1B2D;
-  box-shadow:0 12px 26px rgba(0,0,0,0.24);
+  border-color:#7C4A03;
+  background:linear-gradient(135deg,rgba(245,158,11,0.18) 0%,rgba(249,115,22,0.10) 100%);
+  box-shadow:0 12px 26px rgba(0,0,0,0.24), 0 0 0 1px rgba(251,191,36,0.04);
 }
-.dark .selection-count{color:#BFDBFE}
-.dark .selection-actions .btn{
-  background:#101722;
-  border-color:#253247;
-  color:#E5E7EB;
+.dark .selection-count{color:#FDE68A}
+.dark .selection-actions .btn:not(:disabled){
+  border-color:transparent;
+  background:linear-gradient(135deg,#FDE68A 0%,#F59E0B 50%,#F97316 100%);
+  color:#111827;
+  box-shadow:0 8px 20px rgba(245,158,11,0.16);
 }
-.dark .selection-actions .btn:hover{
-  background:#172033;
-  border-color:#385173;
-  color:#F8FAFC;
+.dark .selection-actions .btn:not(:disabled):hover{
+  background:linear-gradient(135deg,#FCD34D 0%,#F59E0B 50%,#EA580C 100%);
+  color:#111827;
 }
 .dark .selection-actions .btn:disabled{
-  background:#172033;
-  border-color:#223047;
-  color:#64748B;
+  background:rgba(120,53,15,0.18);
+  border-color:rgba(245,158,11,0.22);
+  color:#A16207;
+}
+.dark .selection-toolbar:not([hidden]) ~ #tasksContainer .task-group{
+  border-color:#F59E0B;
+  background:linear-gradient(135deg,rgba(245,158,11,0.12) 0%,rgba(120,53,15,0.10) 100%);
+  box-shadow:0 12px 26px rgba(0,0,0,0.22), 0 0 0 1px rgba(251,191,36,0.06);
 }
 
 .dark #screenTaskDetail.screen{
