@@ -26,7 +26,7 @@
       }catch(_){ }
     })();
   </script>
-  <link rel="stylesheet" href="style.css?v=1.0.6" />
+  <link rel="stylesheet" href="style.css?v=1.1.5" />
   <!-- Google tag (gtag.js) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-E132M7DYY4"></script>
   <script>
@@ -59,8 +59,8 @@
           <button id="selectTasksAction" class="app-menu-item" type="button" role="menuitem">Selecionar tarefas</button>
           <button id="themeToggleAction" class="app-menu-item" type="button" role="menuitem">Tema: Sistema</button>
           <button id="shareListAction" class="app-menu-item" type="button" role="menuitem">Compartilhar lista</button>
-          <button id="resetAppAction" class="app-menu-item" type="button" role="menuitem">Resetar app</button>
-          <button id="deleteListAction" class="app-menu-item" type="button" role="menuitem">Excluir Lista</button>
+          <button id="resetAppAction" class="app-menu-item" type="button" role="menuitem">Resetar aplicativo</button>
+          <button id="deleteListAction" class="app-menu-item" type="button" role="menuitem">Excluir lista</button>
         </div>
       </div>
     </header>
@@ -96,11 +96,14 @@
         </div>
       </div>
 
+      <div id="listSummaryChips" class="list-summary-chips" aria-label="Resumo da lista"></div>
+      <div id="taskFilterChips" class="task-filter-chips" role="tablist" aria-label="Filtrar tarefas"></div>
+
       <div id="selectionToolbar" class="selection-toolbar" hidden aria-live="polite">
         <div id="selectionCount" class="selection-count">0 itens</div>
         <div class="selection-actions">
           <button id="groupSelectionButton" class="btn primary" type="button" disabled>Agrupar</button>
-          <button id="ungroupSelectionButton" class="btn" type="button" disabled>Separar</button>
+          <button id="ungroupSelectionButton" class="btn" type="button" disabled>Desagrupar</button>
           <button id="cancelSelectionButton" class="btn" type="button">Cancelar</button>
         </div>
       </div>
@@ -116,6 +119,11 @@
         <div id="completedList" class="tasks"></div>
       </div>
 
+      <div id="taskReorderHint" class="task-reorder-hint" hidden>
+        <span aria-hidden="true">☰</span>
+        <span>Arraste para reordenar</span>
+      </div>
+
       <!-- Floating + (right) -->
       <button id="openComposer" class="fab" aria-label="Adicionar">+</button>
       
@@ -125,10 +133,31 @@
     <!-- Screen: Task Detail -->
     <section id="screenTaskDetail" class="screen" aria-label="Tarefa">
       <div class="task-detail">
+        <div class="task-list-chip" aria-label="Lista atual">
+          <span class="task-list-chip-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+              <path d="M8.5 7.5V6.2A2.2 2.2 0 0 1 10.7 4h2.6a2.2 2.2 0 0 1 2.2 2.2v1.3M5.5 8h13A1.5 1.5 0 0 1 20 9.5v7A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5v-7A1.5 1.5 0 0 1 5.5 8ZM9.5 13h5M12 10.8v4.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </span>
+          <span id="taskDetailListName">Lista</span>
+        </div>
+
+        <div id="taskDetailText" class="task-detail-title text" contenteditable="true" spellcheck="false" aria-label="Editar tarefa"></div>
+
         <div class="task-detail-row" id="taskDetailRow">
           <button id="taskDetailCheckbox" class="checkbox-round" aria-label="Concluir tarefa"></button>
-          <div id="taskDetailText" class="text" contenteditable="true" spellcheck="false" aria-label="Editar tarefa"></div>
+          <span class="task-detail-complete-label">Marcar como concluída</span>
         </div>
+
+        <section class="task-priority-panel" aria-label="Prioridade da tarefa">
+          <h2 class="task-priority-title">Prioridade</h2>
+          <div id="taskPriorityOptions" class="task-priority-options" role="radiogroup" aria-label="Prioridade da tarefa">
+            <button type="button" class="task-priority-option active" data-priority="" role="radio" aria-checked="true">Nenhuma</button>
+            <button type="button" class="task-priority-option priority-high" data-priority="high" role="radio" aria-checked="false">Alta</button>
+            <button type="button" class="task-priority-option priority-medium" data-priority="medium" role="radio" aria-checked="false">Média</button>
+            <button type="button" class="task-priority-option priority-low" data-priority="low" role="radio" aria-checked="false">Baixa</button>
+          </div>
+        </section>
 
         <section class="task-media" aria-label="Fotos da tarefa">
           <h2 class="task-media-title">Fotos</h2>
@@ -137,22 +166,39 @@
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="M4 6a2 2 0 0 1 2-2h2.172a2 2 0 0 1 1.414.586l.828.828H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Zm2 0v10h12V8h-7.172a2 2 0 0 1-1.414-.586L8.586 6H6Zm6 3a3 3 0 1 1 0 6 3 3 0 0 1 0-6Z" fill="currentColor" />
               </svg>
-              <p>Adicione uma foto</p>
+              <p>Nenhuma foto adicionada</p>
+              <span>Adicione fotos para esta tarefa</span>
             </div>
           </div>
         </section>
 
         <div class="task-media-footer" role="group" aria-label="Opções de foto">
-          <button id="taskDeleteButton" class="btn danger task-delete-action" type="button">Excluir tarefa</button>
-          <button class="btn primary photo-action" type="button">
+          <div class="task-photo-actions">
+            <button class="btn primary photo-action" type="button">
+              <span class="photo-action-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                  <path d="M4 7a3 3 0 0 1 3-3h2.172a3 3 0 0 1 2.121.879l.828.828H16a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V7Zm7 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm8-5v2h2V5h-2Z" fill="currentColor" />
+                </svg>
+              </span>
+              Tirar foto
+            </button>
+            <button class="btn photo-action" type="button">
+              <span class="photo-action-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                  <path d="M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Zm2 10 3.2-3.2a1 1 0 0 1 1.4 0L14 14.2l1.2-1.2a1 1 0 0 1 1.4 0L19 15.4V7H5v8h2Zm1-6.2a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6Z" fill="currentColor" />
+                </svg>
+              </span>
+              Galeria
+            </button>
+          </div>
+          <button id="taskDeleteButton" class="btn danger task-delete-action" type="button">
             <span class="photo-action-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
-                <path d="M4 7a3 3 0 0 1 3-3h2.172a3 3 0 0 1 2.121.879l.828.828H16a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V7Zm7 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm8-5v2h2V5h-2Z" fill="currentColor" />
+                <path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-.7 11H7.7L7 9Zm3 2v7h1.5v-7H10Zm2.5 0v7H14v-7h-1.5Z" fill="currentColor" />
               </svg>
             </span>
-            Tirar Foto
+            Excluir tarefa
           </button>
-          <button class="btn photo-action" type="button">Galeria</button>
         </div>
       </div>
 
@@ -855,6 +901,6 @@
   </script>
   
   <script src="vendor/sortable.min.js?v=1.15.0"></script>
-  <script src="script.js?v=1.2.6"></script>
+  <script src="script.js?v=1.3.6"></script>
 </body>
 </html>

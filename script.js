@@ -12,6 +12,7 @@
       const LEGACY_LOCAL_ORDER_STORAGE_KEY = 'todo_local_order_v1';
       const SYNC_OUTBOX_STORAGE_KEY = 'todo_sync_outbox_v1';
       const CLIENT_ID_STORAGE_KEY = 'todo_client_id_v1';
+      const TASK_PRIORITY_STORAGE_KEY = 'todo_task_priority_v1';
       const SHARED_SCHEMA_VERSION = 2;
       const PUBLIC_SHARE_BASE_URL = 'https://malgany.github.io/to-do';
       let completedCollapseByList = {};
@@ -275,6 +276,9 @@
       const modalCancel = el('modalCancel');
       const modalPrimary = el('modalPrimary');
       const currentListName = el('currentListName');
+      const listSummaryChips = el('listSummaryChips');
+      const taskFilterChips = el('taskFilterChips');
+      const taskReorderHint = el('taskReorderHint');
       const appTitle = el('appTitle');
       const appSubtitle = el('appSubtitle');
       const appMenuBtn = el('appMenuBtn');
@@ -736,6 +740,8 @@
       const taskDetailRow = el('taskDetailRow');
       const taskDetailCheckbox = el('taskDetailCheckbox');
       const taskDetailText = el('taskDetailText');
+      const taskDetailListName = el('taskDetailListName');
+      const taskPriorityOptions = el('taskPriorityOptions');
       const taskPhotoGrid = el('taskPhotoGrid');
       const photoLightbox = el('photoLightbox');
       const photoLightboxImage = el('photoLightboxImage');
@@ -749,6 +755,7 @@
       // helpers
       let isMenuOpen = false;
       let themePreference = 'system';
+      let currentTaskFilter = 'all';
       const themeMediaQuery = (typeof window !== 'undefined' && typeof window.matchMedia === 'function')
         ? window.matchMedia('(prefers-color-scheme: dark)')
         : null;
@@ -1368,7 +1375,36 @@
         appMenuBtn.style.display = 'inline-flex';
       }
 
+      function setMenuItemVisible(item, visible){
+        if(!item){ return; }
+        item.hidden = !visible;
+        item.style.display = visible ? '' : 'none';
+      }
+
+      function getFirstVisibleMenuItem(){
+        return [selectTasksAction, themeToggleAction, shareListAction, resetAppAction, deleteListAction]
+          .find((item)=> item && !item.hidden && item.style.display !== 'none' && !item.disabled);
+      }
+
+      function configureAppMenuForScreen(activeScreen){
+        hideAppMenu();
+        const isListsScreen = activeScreen === screenLists;
+        const isListDetailScreen = activeScreen === screenListDetail;
+
+        setMenuItemVisible(selectTasksAction, isListDetailScreen);
+        setMenuItemVisible(themeToggleAction, isListsScreen);
+        setMenuItemVisible(shareListAction, isListDetailScreen);
+        setMenuItemVisible(resetAppAction, isListsScreen);
+        setMenuItemVisible(deleteListAction, isListDetailScreen);
+        setAppMenuVisibility(isListsScreen || isListDetailScreen);
+      }
+
       function updateAppBar(activeScreen){
+        if(document && document.body){
+          document.body.classList.toggle('lists-screen-active', activeScreen===screenLists);
+          document.body.classList.toggle('list-detail-screen-active', activeScreen===screenListDetail);
+          document.body.classList.toggle('task-detail-screen-active', activeScreen===screenTaskDetail);
+        }
         if(activeScreen===screenLists){
           updateSubtitle();
           globalBackBtn.hidden = true;
@@ -1377,7 +1413,7 @@
           btnNewList.hidden = false;
           if(appSubtitle){ appSubtitle.hidden = false; }
           if(btnImportCode){ btnImportCode.style.display = ""; }
-          setAppMenuVisibility(false);
+          configureAppMenuForScreen(activeScreen);
         } else if(activeScreen===screenListDetail){
           globalBackBtn.hidden = false;
           appTitle.hidden = true;
@@ -1385,7 +1421,7 @@
           btnNewList.hidden = true;
           if(appSubtitle){ appSubtitle.hidden = true; }
           if(btnImportCode){ btnImportCode.style.display = "none"; }
-          setAppMenuVisibility(true);
+          configureAppMenuForScreen(activeScreen);
           const list = lists.find(x=>x.id===currentListId);
           if(shareListAction){
             const isImported = !!(list && list.imported);
@@ -1395,18 +1431,12 @@
           }
         } else if(activeScreen===screenTaskDetail){
           globalBackBtn.hidden = false;
-          const list = lists.find(x=>x.id===currentListId);
-          if(list){
-            appTitle.hidden = false;
-            appTitle.textContent = list.title;
-          } else {
-            appTitle.hidden = true;
-            appTitle.textContent = '';
-          }
+          appTitle.hidden = true;
+          appTitle.textContent = '';
           btnNewList.hidden = true;
           if(appSubtitle){ appSubtitle.hidden = true; }
           if(btnImportCode){ btnImportCode.style.display = "none"; }
-          setAppMenuVisibility(false);
+          configureAppMenuForScreen(activeScreen);
         }
       }
 
@@ -2559,9 +2589,8 @@
           isMenuOpen = true;
           document.addEventListener('click', handleOutsideMenuClick, true);
           document.addEventListener('keydown', handleMenuKeyDown);
-          if(selectTasksAction){ selectTasksAction.focus(); }
-          else if(themeToggleAction){ themeToggleAction.focus(); }
-          else { shareListAction.focus(); }
+          const firstItem = getFirstVisibleMenuItem();
+          if(firstItem){ firstItem.focus(); }
         }
       }
 
@@ -2778,32 +2807,248 @@
         document.body.removeChild(temp);
       }
 
-      function createListIconSvg(){
+      function createListIconSvg(iconName){
         const svg = document.createElementNS(SVG_NS, 'svg');
         svg.setAttribute('viewBox', '0 0 24 24');
         svg.setAttribute('aria-hidden', 'true');
         svg.setAttribute('focusable', 'false');
+        svg.setAttribute('fill', 'none');
 
-        [6, 12, 18].forEach((y)=>{
-          const bullet = document.createElementNS(SVG_NS, 'circle');
-          bullet.setAttribute('cx', '5');
-          bullet.setAttribute('cy', String(y));
-          bullet.setAttribute('r', '1.8');
-          bullet.setAttribute('fill', 'currentColor');
-          svg.appendChild(bullet);
+        const addPath = (d, options)=>{
+          const path = document.createElementNS(SVG_NS, 'path');
+          path.setAttribute('d', d);
+          path.setAttribute('stroke', 'currentColor');
+          path.setAttribute('stroke-width', options && options.width ? String(options.width) : '1.8');
+          path.setAttribute('stroke-linecap', 'round');
+          path.setAttribute('stroke-linejoin', 'round');
+          if(options && options.fill){ path.setAttribute('fill', 'currentColor'); }
+          svg.appendChild(path);
+        };
 
-          const line = document.createElementNS(SVG_NS, 'line');
-          line.setAttribute('x1', '9');
-          line.setAttribute('y1', String(y));
-          line.setAttribute('x2', '19');
-          line.setAttribute('y2', String(y));
-          line.setAttribute('stroke', 'currentColor');
-          line.setAttribute('stroke-width', '2');
-          line.setAttribute('stroke-linecap', 'round');
-          svg.appendChild(line);
-        });
+        if(iconName === 'book'){
+          addPath('M7 4.5h8.5A2.5 2.5 0 0 1 18 7v12.5H8.5A2.5 2.5 0 0 1 6 17V6.5A2 2 0 0 1 8 4.5Z');
+          addPath('M8.5 17H18');
+          addPath('M9 8h5');
+        } else if(iconName === 'bulb'){
+          addPath('M9 18h6');
+          addPath('M10 21h4');
+          addPath('M8.5 13.5c-1.2-1-2-2.5-2-4.2A5.5 5.5 0 0 1 12 3.8a5.5 5.5 0 0 1 5.5 5.5c0 1.7-.8 3.2-2 4.2-.8.7-1.2 1.5-1.2 2.5H9.7c0-1-.4-1.8-1.2-2.5Z');
+        } else {
+          addPath('M8.5 7.5V6.2A2.2 2.2 0 0 1 10.7 4h2.6a2.2 2.2 0 0 1 2.2 2.2v1.3');
+          addPath('M5.5 8h13A1.5 1.5 0 0 1 20 9.5v7A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5v-7A1.5 1.5 0 0 1 5.5 8Z');
+          addPath('M9.5 13h5');
+          addPath('M12 10.8v4.4');
+        }
 
         return svg;
+      }
+
+      function createChevronIconSvg(){
+        const svg = document.createElementNS(SVG_NS, 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('aria-hidden', 'true');
+        svg.setAttribute('focusable', 'false');
+        svg.setAttribute('fill', 'none');
+        const path = document.createElementNS(SVG_NS, 'path');
+        path.setAttribute('d', 'M9 5l7 7-7 7');
+        path.setAttribute('stroke', 'currentColor');
+        path.setAttribute('stroke-width', '2.4');
+        path.setAttribute('stroke-linecap', 'round');
+        path.setAttribute('stroke-linejoin', 'round');
+        svg.appendChild(path);
+        return svg;
+      }
+
+      const LIST_VISUAL_PRESETS = [
+        { icon: 'briefcase', className: 'list-icon-blue', terms: ['projeto', 'design', 'trabalho'] },
+        { icon: 'book', className: 'list-icon-purple', terms: ['matematica', 'estudo', 'aula'] },
+        { icon: 'bulb', className: 'list-icon-yellow', terms: ['ideias', 'ideia', 'conteudo', 'criativo'] },
+        { icon: 'book', className: 'list-icon-green', terms: ['leitura', 'livro'] }
+      ];
+
+      function normalizeListMatchText(value){
+        try{
+          return String(value || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase();
+        }catch(_){
+          return String(value || '').toLowerCase();
+        }
+      }
+
+      function getListVisualConfig(list, index){
+        const title = normalizeListMatchText(list && list.title);
+        const matched = LIST_VISUAL_PRESETS.find((preset)=>
+          preset.terms.some((term)=> title.includes(term))
+        );
+        return matched || LIST_VISUAL_PRESETS[index % LIST_VISUAL_PRESETS.length];
+      }
+
+      function getVisibleListTasks(list){
+        return Array.isArray(list && list.tasks)
+          ? list.tasks.filter((task)=> task && !isTaskDeleted(task))
+          : [];
+      }
+
+      function formatListTaskCount(count){
+        return `${count} ${count === 1 ? 'tarefa' : 'tarefas'}`;
+      }
+
+      const LIST_INITIAL_COLOR_CLASSES = [
+        'list-initial-blue',
+        'list-initial-purple',
+        'list-initial-green',
+        'list-initial-amber',
+        'list-initial-rose',
+        'list-initial-cyan'
+      ];
+
+      function getListInitials(title){
+        const value = String(title || '').trim();
+        let source = value;
+        try{
+          const match = value.match(/[\p{L}\p{N}]+/u);
+          if(match && match[0]){ source = match[0]; }
+        }catch(_){
+          const fallback = value.match(/[A-Za-z0-9À-ÿ]+/);
+          if(fallback && fallback[0]){ source = fallback[0]; }
+        }
+        const chars = Array.from(source).filter((char)=> char.trim()).slice(0, 2);
+        if(chars.length===0){ return 'Li'; }
+        const first = chars[0].toLocaleUpperCase('pt-BR');
+        const second = chars[1] ? chars[1].toLocaleLowerCase('pt-BR') : '';
+        return `${first}${second}`;
+      }
+
+      function getListInitialColorClass(title){
+        const normalized = normalizeListMatchText(title);
+        let hash = 0;
+        for(let index = 0; index < normalized.length; index += 1){
+          hash = (hash * 31 + normalized.charCodeAt(index)) >>> 0;
+        }
+        return LIST_INITIAL_COLOR_CLASSES[hash % LIST_INITIAL_COLOR_CLASSES.length];
+      }
+
+      const TASK_FILTERS = [
+        { id: 'all', label: 'Todas' },
+        { id: 'active', label: 'A fazer' },
+        { id: 'done', label: 'Concluídas' }
+      ];
+
+      function createPriorityFlagSvg(){
+        const svg = document.createElementNS(SVG_NS, 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('aria-hidden', 'true');
+        svg.setAttribute('focusable', 'false');
+        const path = document.createElementNS(SVG_NS, 'path');
+        path.setAttribute('d', 'M6 21V4h10l.8 2H20v9h-7l-.8-2H8v8H6Z');
+        path.setAttribute('fill', 'currentColor');
+        svg.appendChild(path);
+        return svg;
+      }
+
+      const TASK_PRIORITY_META = Object.freeze({
+        high: { label: 'Prioridade alta', shortLabel: 'Alta', className: 'priority-high' },
+        medium: { label: 'Prioridade média', shortLabel: 'Média', className: 'priority-medium' },
+        low: { label: 'Prioridade baixa', shortLabel: 'Baixa', className: 'priority-low' }
+      });
+
+      function loadAllTaskPriorities(){
+        try{
+          const raw = localStorage.getItem(TASK_PRIORITY_STORAGE_KEY);
+          const parsed = raw ? JSON.parse(raw) : {};
+          if(parsed && typeof parsed === 'object' && !Array.isArray(parsed)){ return parsed; }
+        }catch(_){ }
+        return {};
+      }
+
+      function saveAllTaskPriorities(priorityByList){
+        try{
+          localStorage.setItem(TASK_PRIORITY_STORAGE_KEY, JSON.stringify(priorityByList || {}));
+        }catch(_){ }
+      }
+
+      function getTaskPriorityValue(listId, taskId){
+        if(!listId || !taskId){ return ''; }
+        const priorityByList = loadAllTaskPriorities();
+        const listPriorities = priorityByList[listId];
+        if(!listPriorities || typeof listPriorities !== 'object'){ return ''; }
+        const value = listPriorities[taskId];
+        return TASK_PRIORITY_META[value] ? value : '';
+      }
+
+      function setTaskPriorityValue(listId, taskId, priorityValue){
+        if(!listId || !taskId){ return; }
+        const normalized = TASK_PRIORITY_META[priorityValue] ? priorityValue : '';
+        const priorityByList = loadAllTaskPriorities();
+        const currentListPriorities = priorityByList[listId];
+        const listPriorities = (currentListPriorities && typeof currentListPriorities === 'object' && !Array.isArray(currentListPriorities))
+          ? currentListPriorities
+          : {};
+
+        if(normalized){
+          listPriorities[taskId] = normalized;
+          priorityByList[listId] = listPriorities;
+        } else {
+          delete listPriorities[taskId];
+          if(Object.keys(listPriorities).length){ priorityByList[listId] = listPriorities; }
+          else { delete priorityByList[listId]; }
+        }
+        saveAllTaskPriorities(priorityByList);
+      }
+
+      function getTaskPriorityMeta(priorityValue){
+        return TASK_PRIORITY_META[priorityValue] || null;
+      }
+
+      function renderTaskPriorityControls(){
+        if(!taskPriorityOptions){ return; }
+        const currentPriority = getTaskPriorityValue(currentListId, currentTaskId);
+        taskPriorityOptions.querySelectorAll('[data-priority]').forEach((button)=>{
+          const value = button.dataset.priority || '';
+          const active = value === currentPriority;
+          button.classList.toggle('active', active);
+          button.setAttribute('aria-checked', active ? 'true' : 'false');
+        });
+      }
+
+      function renderListSummaryChips(totalCount){
+        if(!listSummaryChips){ return; }
+        listSummaryChips.innerHTML = '';
+
+        const countChip = document.createElement('span');
+        countChip.className = 'list-summary-chip list-summary-count';
+        countChip.textContent = formatListTaskCount(totalCount);
+        listSummaryChips.appendChild(countChip);
+      }
+
+      function renderTaskFilterChips(counts){
+        if(!taskFilterChips){ return; }
+        taskFilterChips.innerHTML = '';
+        TASK_FILTERS.forEach((filter)=>{
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'task-filter-chip';
+          if(currentTaskFilter === filter.id){ button.classList.add('active'); }
+          button.setAttribute('role', 'tab');
+          button.setAttribute('aria-selected', currentTaskFilter === filter.id ? 'true' : 'false');
+          button.dataset.filter = filter.id;
+
+          const label = document.createElement('span');
+          label.textContent = filter.label;
+          const count = document.createElement('span');
+          count.className = 'task-filter-count';
+          count.textContent = String(counts[filter.id] || 0);
+          button.appendChild(label);
+          button.appendChild(count);
+          button.addEventListener('click', ()=>{
+            if(currentTaskFilter === filter.id){ return; }
+            currentTaskFilter = filter.id;
+            renderTasks();
+          });
+          taskFilterChips.appendChild(button);
+        });
       }
 
       function createDragHandleIconSvg(){
@@ -2861,30 +3106,72 @@
           listsContainer.appendChild(noLists);
           return;
         }
-        lists.forEach(l=>{
+        const heading = document.createElement('h2');
+        heading.className = 'lists-heading';
+        heading.textContent = 'Minhas listas';
+        listsContainer.appendChild(heading);
+
+        lists.forEach((l, index)=>{
+          const visibleTasks = getVisibleListTasks(l);
+          const totalTasks = visibleTasks.length;
+
           const card = document.createElement('div');
           card.className='list-card';
           card.tabIndex=0;
           card.dataset.id = l.id; // Atributo data para sorting
-          card.addEventListener('click', ()=>openList(l.id));
-          card.addEventListener('keydown', (e)=>{ if(e.key==='Enter') openList(l.id) });
+          card.addEventListener('click', ()=> openList(l.id));
+          card.addEventListener('keydown', (event)=>{
+            if(event.key === 'Enter' || event.key === ' '){
+              event.preventDefault();
+              openList(l.id);
+            }
+          });
+
+          const bodyButton = document.createElement('button');
+          bodyButton.type = 'button';
+          bodyButton.className = 'list-card-body';
+          bodyButton.setAttribute('aria-label', `Abrir lista ${l.title}, ${formatListTaskCount(totalTasks)}`);
 
           const ico = document.createElement('div');
-          ico.className='list-icon';
-          ico.appendChild(createListIconSvg());
-          const txt = document.createElement('div'); txt.className='list-title'; txt.textContent=l.title;
-          const incompleteCount = Array.isArray(l.tasks)
-            ? l.tasks.reduce((total, task)=> total + (task && !isTaskDeleted(task) && !task.done ? 1 : 0), 0)
-            : 0;
+          ico.className=`list-icon list-initial ${getListInitialColorClass(l.title)}`;
+          ico.setAttribute('aria-hidden', 'true');
+          ico.textContent = getListInitials(l.title);
 
-          card.appendChild(ico);
-          card.appendChild(txt);
+          const content = document.createElement('div');
+          content.className = 'list-card-content';
 
-          const countEl = document.createElement('div');
+          const txt = document.createElement('div');
+          txt.className='list-title';
+          txt.textContent=l.title;
+
+          const countEl = document.createElement('p');
           countEl.className='list-counter';
-          countEl.textContent = incompleteCount;
-          countEl.setAttribute('aria-label', `${incompleteCount} ${(incompleteCount===1)?'tarefa pendente':'tarefas pendentes'}`);
-          card.appendChild(countEl);
+          countEl.textContent = formatListTaskCount(totalTasks);
+
+          content.appendChild(txt);
+          content.appendChild(countEl);
+
+          bodyButton.appendChild(ico);
+          bodyButton.appendChild(content);
+
+          const openButton = document.createElement('button');
+          openButton.type = 'button';
+          openButton.className = 'list-card-open';
+          openButton.setAttribute('aria-label', `Abrir lista ${l.title}`);
+          openButton.appendChild(createChevronIconSvg());
+          openButton.addEventListener('pointerdown', (event)=>{
+            event.stopPropagation();
+          });
+          openButton.addEventListener('touchstart', (event)=>{
+            event.stopPropagation();
+          }, { passive: true });
+          openButton.addEventListener('click', (event)=>{
+            event.stopPropagation();
+            openList(l.id);
+          });
+
+          card.appendChild(bodyButton);
+          card.appendChild(openButton);
 
           listsContainer.appendChild(card);
         });
@@ -3112,6 +3399,7 @@
         currentListId = id;
         isSelectionMode = false;
         selectedTaskIds = new Set();
+        currentTaskFilter = 'all';
         const list = lists.find(x=>x.id===id);
         currentListName.textContent = list ? list.title : 'Lista';
         renderTasks();
@@ -3136,21 +3424,16 @@
         updatePhotoActionState(task);
         closePhotoLightbox({ skipPersist:true });
         // populate task
+        if(taskDetailListName){ taskDetailListName.textContent = list.title || 'Lista'; }
         taskDetailText.textContent = task.text || '';
         taskDetailText.setAttribute('data-placeholder','Renomear tarefa');
         lastValidTaskText = task.text || '';
+        renderTaskPriorityControls();
         // checkbox state
         if(task.done){ taskDetailCheckbox.classList.add('checked'); taskDetailCheckbox.innerHTML='✓'; }
         else { taskDetailCheckbox.classList.remove('checked'); taskDetailCheckbox.innerHTML=''; }
         setCheckedMark(taskDetailCheckbox, !!task.done);
         showScreen(screenTaskDetail);
-        // focus contenteditable when opening
-        setTimeout(()=>{
-          taskDetailText.focus();
-          if(taskDetailText.textContent && taskDetailText.textContent.length>0){
-            placeCaretAtEnd(taskDetailText);
-          }
-        },120);
         if(opts.fromHistory){
           renderTasks();
         }
@@ -3164,10 +3447,11 @@
         const range = document.createRange(); const sel = window.getSelection(); range.selectNodeContents(el); range.collapse(false); sel.removeAllRanges(); sel.addRange(range);
       }
 
-      function buildTaskElement(task, isDone){
+      function buildTaskElement(task, isDone, priorityMeta){
         const node = document.createElement('div');
         node.className = isDone ? 'task done' : 'task';
         node.dataset.id = task.id;
+        node.dataset.done = isDone ? 'true' : 'false';
         if(isSelectionMode && selectedTaskIds.has(task.id)){
           node.classList.add('selected');
         }
@@ -3184,7 +3468,7 @@
           cb.className = 'checkbox-round checked';
           cb.setAttribute('aria-pressed', 'true');
           cb.title = 'Desmarcar';
-          cb.innerHTML = 'âœ“';
+          cb.innerHTML = '&#10003;';
           cb.addEventListener('click', (ev)=>{
             ev.stopPropagation();
             if(isSelectionMode){
@@ -3197,7 +3481,7 @@
         } else {
           cb.className = 'checkbox-round';
           cb.setAttribute('aria-pressed', 'false');
-          cb.title = 'Marcar como concluÃ­da';
+          cb.title = 'Marcar como concluída';
           cb.addEventListener('click', (ev)=>{
             ev.stopPropagation();
             if(isSelectionMode){
@@ -3208,10 +3492,27 @@
           });
         }
 
-        const txt = document.createElement('div');
-        txt.className = 'text';
-        txt.textContent = task.text;
-        txt.addEventListener('click', (ev)=>{
+        if(isSelectionMode){
+          const isSelected = selectedTaskIds.has(task.id);
+          cb.className = isSelected ? 'checkbox-round checked selection-checkbox' : 'checkbox-round selection-checkbox';
+          cb.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+          cb.title = isSelected ? 'Remover da seleção' : 'Selecionar tarefa';
+          setCheckedMark(cb, isSelected);
+        }
+
+        cb.addEventListener('click', (ev)=>{
+          ev.stopPropagation();
+          ev.stopImmediatePropagation();
+          if(isSelectionMode){
+            toggleTaskSelection(task.id);
+            return;
+          }
+          animateAndToggle(cb, task.id, !isDone);
+        }, true);
+
+        const content = document.createElement('div');
+        content.className = 'task-content';
+        content.addEventListener('click', (ev)=>{
           ev.stopPropagation();
           if(isSelectionMode){
             toggleTaskSelection(task.id);
@@ -3219,6 +3520,19 @@
           }
           openTaskDetail(task.id);
         });
+
+        const txt = document.createElement('div');
+        txt.className = 'text';
+        txt.textContent = task.text;
+        content.appendChild(txt);
+
+        if(priorityMeta){
+          const priority = document.createElement('span');
+          priority.className = `task-priority ${priorityMeta.className}`;
+          priority.appendChild(createPriorityFlagSvg());
+          priority.appendChild(document.createTextNode(priorityMeta.label));
+          content.appendChild(priority);
+        }
 
         const handle = document.createElement('button');
         handle.type = 'button';
@@ -3233,7 +3547,7 @@
         }
 
         body.appendChild(cb);
-        body.appendChild(txt);
+        body.appendChild(content);
         body.appendChild(handle);
         if(isSelectionMode){
           body.addEventListener('click', ()=> toggleTaskSelection(task.id));
@@ -3256,7 +3570,7 @@
       }
 
       // Renderizar tarefas com suporte a agrupamento visual
-      function renderTasksWithGroups(tasks, container, groups, isDone) {
+      function renderTasksWithGroups(tasks, container, groups, isDone, priorityByTask) {
         // Criar mapa de taskId -> groupId
         const taskToGroup = {};
         for (const [groupId, group] of Object.entries(groups)) {
@@ -3335,7 +3649,7 @@
 
             // Adicionar tarefas do grupo na ordem original
             groupTasks.forEach(groupTask => {
-              const taskEl = buildTaskElement(groupTask, isDone);
+              const taskEl = buildTaskElement(groupTask, isDone, priorityByTask && priorityByTask.get(groupTask.id));
               groupContainer.appendChild(taskEl);
               processedTasks.add(groupTask.id);
             });
@@ -3344,7 +3658,7 @@
             delete groupedTasks[groupId]; // Evitar renderizar o mesmo grupo duas vezes
           } else if (!groupId) {
             // Renderizar tarefa sem grupo
-            const taskEl = buildTaskElement(task, isDone);
+            const taskEl = buildTaskElement(task, isDone, priorityByTask && priorityByTask.get(task.id));
             container.appendChild(taskEl);
             processedTasks.add(task.id);
           }
@@ -3358,21 +3672,72 @@
         if(selectedTaskIds.size){
           selectedTaskIds = new Set(Array.from(selectedTaskIds).filter((taskId)=> !!findTaskById(list, taskId, false)));
         }
-        completedCollapsed = getCompletedCollapseForList(list.id);
         const visibleTasks = getVisibleTasks(list);
         const active = visibleTasks.filter(t=>!t.done);
         const done = visibleTasks.filter(t=>t.done);
+        const counts = {
+          all: visibleTasks.length,
+          active: active.length,
+          done: done.length
+        };
+        if(!TASK_FILTERS.some((filter)=> filter.id === currentTaskFilter)){
+          currentTaskFilter = 'all';
+        }
+        renderListSummaryChips(visibleTasks.length);
+        renderTaskFilterChips(counts);
 
         // Carregar grupos locais da lista
         const groups = loadLocalGroups(currentListId);
+        const priorityByTask = new Map();
+        visibleTasks.forEach((task)=>{
+          const priorityMeta = getTaskPriorityMeta(getTaskPriorityValue(currentListId, task.id));
+          if(priorityMeta){ priorityByTask.set(task.id, priorityMeta); }
+        });
 
-        if(active.length===0){ const elEmpty = document.createElement('div'); elEmpty.className='centered-empty'; elEmpty.textContent='Nenhuma tarefa ativa.'; tasksContainer.appendChild(elEmpty); }
-        else{
-          // Renderizar tarefas ativas com agrupamento visual
-          renderTasksWithGroups(active, tasksContainer, groups, false);
+        {
+          if(completedGroup){
+            completedGroup.style.display='none';
+          }
+          if(completedList){
+            completedList.style.display='none';
+          }
+
+          let renderedCount = 0;
+          if(currentTaskFilter === 'all'){
+            if(active.length){
+              renderTasksWithGroups(active, tasksContainer, groups, false, priorityByTask);
+              renderedCount += active.length;
+            }
+            if(done.length){
+              renderTasksWithGroups(done, tasksContainer, groups, true, priorityByTask);
+              renderedCount += done.length;
+            }
+          } else if(currentTaskFilter === 'active'){
+            if(active.length){
+              renderTasksWithGroups(active, tasksContainer, groups, false, priorityByTask);
+              renderedCount += active.length;
+            }
+          } else {
+            if(done.length){
+              renderTasksWithGroups(done, tasksContainer, groups, true, priorityByTask);
+              renderedCount += done.length;
+            }
+          }
+
+          if(renderedCount===0){
+            const elEmpty = document.createElement('div');
+            elEmpty.className='centered-empty tasks-empty-state';
+            elEmpty.textContent='Nenhuma tarefa por aqui.';
+            tasksContainer.appendChild(elEmpty);
+          }
+
+          if(taskReorderHint){
+            const canReorder = renderedCount >= 2 && !isSelectionMode;
+            taskReorderHint.hidden = !canReorder;
+          }
         }
 
-        if(done.length>0){
+        if(false && done.length>0){
           completedGroup.style.display='block';
           completedCount.textContent = done.length;
           // update chevron direction
@@ -3412,6 +3777,7 @@
                 lastValidTaskText = syncedText;
               }
             }
+            renderTaskPriorityControls();
           }
         }
       }
@@ -3431,11 +3797,13 @@
         const canGroup = count >= 2 && doneStates.size === 1;
         const canUngroup = selectedTasks.some((task)=> !!getTaskGroup(currentListId, task.id));
         selectionToolbar.hidden = !isSelectionMode;
-        selectionCount.textContent = `${count} ${count===1 ? 'item' : 'itens'}`;
+        selectionCount.textContent = count === 0
+          ? 'Nenhuma selecionada'
+          : `${count} ${count===1 ? 'selecionada' : 'selecionadas'}`;
         groupSelectionButton.disabled = !canGroup;
         ungroupSelectionButton.disabled = !canUngroup;
         if(selectTasksAction){
-          selectTasksAction.textContent = isSelectionMode ? 'Cancelar selecao' : 'Selecionar tarefas';
+          selectTasksAction.textContent = isSelectionMode ? 'Cancelar seleção' : 'Selecionar tarefas';
         }
       }
 
@@ -3895,6 +4263,17 @@
         saveState(); renderLists(); renderTasks(); requestSync(list.id);
       });
 
+      if(taskPriorityOptions){
+        taskPriorityOptions.addEventListener('click', (event)=>{
+          const button = event.target.closest('[data-priority]');
+          if(!button || !taskPriorityOptions.contains(button)){ return; }
+          if(!currentListId || !currentTaskId){ return; }
+          setTaskPriorityValue(currentListId, currentTaskId, button.dataset.priority || '');
+          renderTaskPriorityControls();
+          renderTasks();
+        });
+      }
+
       // task detail checkbox toggle (without leaving screen)
       taskDetailCheckbox.addEventListener('click', ()=>{
         if(!currentTaskId || !currentListId) return;
@@ -4118,7 +4497,7 @@
       function loadSortableJS() {
         return window.Sortable
           ? Promise.resolve(window.Sortable)
-          : Promise.reject(new Error('Sortable local nÃ£o carregado.'));
+          : Promise.reject(new Error('Sortable local não carregado.'));
       }
 
       // Função para inicializar a ordenação das listas
@@ -4133,6 +4512,7 @@
           
           listsSortable = new Sortable(listsContainer, {
             animation: 150,
+            draggable: '.list-card',
             delay: 180,
             delayOnTouchOnly: true,
             touchStartThreshold: 3,
@@ -4730,6 +5110,35 @@
         requestSync(list.id);
       }
 
+      function rebuildRenderedTaskOrderFromDom(list){
+        if(!list){ return; }
+        const visibleTasks = getVisibleTasks(list);
+        const visibleById = new Map(visibleTasks.map((task)=> [task.id, task]));
+        const orderedActive = [];
+        const orderedDone = [];
+
+        document.querySelectorAll('#tasksContainer .task').forEach((element)=>{
+          const task = visibleById.get(element.dataset.id);
+          if(!task){ return; }
+          const target = task.done ? orderedDone : orderedActive;
+          if(!target.includes(task)){
+            target.push(task);
+          }
+        });
+
+        visibleTasks.forEach((task)=>{
+          const target = task.done ? orderedDone : orderedActive;
+          if(!target.includes(task)){
+            target.push(task);
+          }
+        });
+
+        rebuildTaskArrayAfterReorder(list, [...orderedActive, ...orderedDone]);
+        updateLocalOrderForList(list.id);
+        saveState();
+        requestSync(list.id);
+      }
+
       async function initSortableTasksV2() {
         try {
           const Sortable = await loadSortableJS();
@@ -4748,10 +5157,10 @@
             dragClass: 'sortable-drag'
           };
 
-          if(tasksContainer && tasksContainer.children.length > 1){
+          if(tasksContainer && tasksContainer.querySelectorAll('.task').length > 1){
             activeSortable = new Sortable(tasksContainer, {
               ...commonConfig,
-              onEnd: ()=> rebuildActiveOrderFromDom(list)
+              onEnd: ()=> rebuildRenderedTaskOrderFromDom(list)
             });
           }
 
