@@ -1,9 +1,9 @@
-const CACHE_NAME = 'todo-pwa-v25';
+const CACHE_NAME = 'todo-pwa-v30';
 const ASSETS = [
   './',
   './index.html',
-  './style.css?v=1.1.9',
-  './script.js?v=1.3.8',
+  './style.css?v=1.2.1',
+  './script.js?v=1.4.3',
   './vendor/sortable.min.js',
   './manifest.json?v=1.0.1',
   './icons/icon-192.png',
@@ -29,6 +29,18 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
+  const url = new URL(request.url);
+  const isFreshAsset = request.mode === 'navigate' || ['.html', '.js', '.css'].some((ext) => url.pathname.endsWith(ext));
+  if (isFreshAsset) {
+    event.respondWith(
+      fetch(request).then((response) => {
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+        return response;
+      }).catch(() => caches.match(request).then((cached) => cached || caches.match('./index.html')))
+    );
+    return;
+  }
   event.respondWith(
     caches.match(request).then((cached) => {
       if (cached) return cached;

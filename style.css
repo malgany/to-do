@@ -11,6 +11,9 @@
   --brand-50:#EEF2FF;
   --brand-100:#DBE7FE;
   --brand-700:#1D4ED8;
+  --success:#10B981;
+  --success-700:#047857;
+  --success-shadow:rgba(16,185,129,0.26);
   --card-hover:#F7F7F7;
   --shadow-sm:0 1px 3px rgba(15,23,42,0.06);
   --shadow-md:0 18px 40px rgba(15,23,42,0.12);
@@ -41,6 +44,9 @@
   --brand-50:rgba(59,130,246,0.16);
   --brand-100:rgba(59,130,246,0.24);
   --brand-700:#C7D9FF;
+  --success:#10B981;
+  --success-700:#6EE7B7;
+  --success-shadow:rgba(16,185,129,0.24);
   --card-hover:rgba(255,255,255,0.06);
   --shadow-sm:0 1px 4px rgba(0,0,0,0.55);
   --shadow-md:0 18px 40px rgba(0,0,0,0.55);
@@ -189,6 +195,47 @@ header.appbar{
 }
 .app-menu-item:hover{background:var(--card-hover)}
 .app-menu-item:focus-visible{outline:none;background:var(--brand-50)}
+.theme-menu-item{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  padding:8px var(--space-3);
+  cursor:default;
+}
+.theme-menu-item:hover{background:transparent}
+.theme-choice{
+  width:42px;
+  height:36px;
+  border:1px solid var(--border);
+  border-radius:10px;
+  background:var(--bg);
+  color:var(--muted);
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  transition:background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+}
+.theme-choice svg{
+  width:19px;
+  height:19px;
+}
+.theme-choice:hover{
+  color:var(--brand);
+  border-color:var(--brand-100);
+  background:var(--brand-50);
+}
+.theme-choice.active{
+  color:#fff;
+  border-color:var(--brand);
+  background:var(--brand);
+  box-shadow:0 8px 18px rgba(37,99,235,0.24);
+}
+.theme-choice:focus-visible{
+  outline:2px solid var(--brand);
+  outline-offset:2px;
+}
 
 /* screens */
 .screen{display:none;padding:var(--space-4) var(--gutter) calc(80px + env(safe-area-inset-bottom));flex:1;overflow:auto;background:var(--bg)}
@@ -1249,6 +1296,12 @@ html:not(.dark) body.list-detail-screen-active .list-name{
   color:#fff;
   box-shadow:0 10px 22px rgba(47,115,246,0.28);
 }
+.task-filter-chip[data-filter="done"].active{
+  border-color:var(--success);
+  background:var(--success);
+  color:#fff;
+  box-shadow:0 10px 22px var(--success-shadow);
+}
 .task-filter-count{
   opacity:.72;
   font-weight:800;
@@ -1284,6 +1337,10 @@ html:not(.dark) body.list-detail-screen-active .checkbox-round{
 html:not(.dark) body.list-detail-screen-active .checkbox-round.checked{
   border-color:#2F73F6;
   background:#2F73F6;
+}
+html:not(.dark) body.list-detail-screen-active.task-filter-done-active .task.done .checkbox-round.checked{
+  border-color:var(--success);
+  background:var(--success);
 }
 .task-content{
   flex:1;
@@ -1472,6 +1529,25 @@ html:not(.dark) body.list-detail-screen-active .tasks-empty-state{
 .dark .app-menu-item:focus-visible{
   background:#13213A;
 }
+.dark .theme-menu-item:hover{
+  background:transparent;
+}
+.dark .theme-choice{
+  border-color:#243247;
+  background:#0B111A;
+  color:#94A3B8;
+}
+.dark .theme-choice:hover{
+  color:#93C5FD;
+  border-color:#31517D;
+  background:#13213A;
+}
+.dark .theme-choice.active{
+  color:#fff;
+  border-color:#3B82F6;
+  background:#3B82F6;
+  box-shadow:0 10px 20px rgba(59,130,246,0.28);
+}
 
 .dark body.list-detail-screen-active header.appbar,
 .dark body.task-detail-screen-active header.appbar{
@@ -1526,6 +1602,12 @@ html:not(.dark) body.list-detail-screen-active .tasks-empty-state{
   color:#fff;
   box-shadow:0 12px 24px rgba(59,130,246,0.25);
 }
+.dark .task-filter-chip[data-filter="done"].active{
+  border-color:var(--success);
+  background:var(--success);
+  color:#fff;
+  box-shadow:0 12px 24px var(--success-shadow);
+}
 .dark body.list-detail-screen-active .tasks{
   gap:12px;
   margin-top:17px;
@@ -1571,6 +1653,10 @@ html:not(.dark) body.list-detail-screen-active .tasks-empty-state{
 .dark body.list-detail-screen-active .checkbox-round.checked{
   border-color:#3B82F6;
   background:#3B82F6;
+}
+.dark body.list-detail-screen-active.task-filter-done-active .task.done .checkbox-round.checked{
+  border-color:var(--success);
+  background:var(--success);
 }
 .dark body.list-detail-screen-active .task.selected .task-body{
   border-color:#F59E0B;

@@ -26,7 +26,7 @@
       }catch(_){ }
     })();
   </script>
-  <link rel="stylesheet" href="style.css?v=1.1.9" />
+  <link rel="stylesheet" href="style.css?v=1.2.1" />
   <!-- Google tag (gtag.js) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-E132M7DYY4"></script>
   <script>
@@ -57,9 +57,28 @@
         <button id="appMenuBtn" class="icon-btn" type="button" aria-label="Mais opções" aria-haspopup="true" aria-expanded="false" hidden>⋮</button>
         <div id="appMenu" class="app-menu" role="menu" hidden>
           <button id="selectTasksAction" class="app-menu-item" type="button" role="menuitem">Selecionar tarefas</button>
-          <button id="themeToggleAction" class="app-menu-item" type="button" role="menuitem">Tema: Sistema</button>
+          <div id="themeToggleAction" class="app-menu-item theme-menu-item" role="menuitem" tabindex="0" aria-label="Tema">
+            <button class="theme-choice" type="button" data-theme-value="light" aria-label="Tema claro" aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2" />
+                <path d="M12 2v3M12 19v3M4.9 4.9 7 7M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+              </svg>
+            </button>
+            <button class="theme-choice" type="button" data-theme-value="system" aria-label="Usar tema do aparelho" aria-pressed="true">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <rect x="4" y="5" width="16" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="2" />
+                <path d="M9 20h6M12 16v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+              </svg>
+            </button>
+            <button class="theme-choice" type="button" data-theme-value="dark" aria-label="Tema escuro" aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M20.2 14.6A7.8 7.8 0 0 1 9.4 3.8 8.3 8.3 0 1 0 20.2 14.6Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+              </svg>
+            </button>
+          </div>
           <button id="shareListAction" class="app-menu-item" type="button" role="menuitem">Compartilhar lista</button>
-          <button id="resetAppAction" class="app-menu-item" type="button" role="menuitem">Resetar aplicativo</button>
+          <button id="resetAppAction" class="app-menu-item" type="button" role="menuitem">Limpar cache local</button>
+          <button id="exitAppAction" class="app-menu-item" type="button" role="menuitem">Sair</button>
           <button id="deleteListAction" class="app-menu-item" type="button" role="menuitem">Excluir lista</button>
         </div>
       </div>
@@ -901,6 +920,6 @@
   </script>
   
   <script src="vendor/sortable.min.js?v=1.15.0"></script>
-  <script src="script.js?v=1.3.8"></script>
+  <script src="script.js?v=1.4.3"></script>
 </body>
 </html>

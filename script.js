@@ -13,11 +13,13 @@
       const SYNC_OUTBOX_STORAGE_KEY = 'todo_sync_outbox_v1';
       const CLIENT_ID_STORAGE_KEY = 'todo_client_id_v1';
       const TASK_PRIORITY_STORAGE_KEY = 'todo_task_priority_v1';
+      const TASK_FILTER_STORAGE_KEY = 'todo_task_filter_v1';
       const SHARED_SCHEMA_VERSION = 2;
       const PUBLIC_SHARE_BASE_URL = 'https://malgany.github.io/to-do';
       let completedCollapseByList = {};
       let localOrderByList = {};
       let syncOutboxByList = {};
+      let taskFilterByList = {};
       let lastValidTaskText = '';
       const clientId = loadOrCreateClientId();
       const el = id=>document.getElementById(id);
@@ -293,6 +295,7 @@
       const shareRetryBtn = el('shareRetryBtn');
       const shareCloseBtn = el('shareCloseBtn');
       const resetAppAction = el('resetAppAction');
+      const exitAppAction = el('exitAppAction');
       const deleteListAction = el('deleteListAction');
       const globalBackBtn = el('globalBackBtn');
       const DEFAULT_TITLE = appTitle.textContent;
@@ -1382,7 +1385,7 @@
       }
 
       function getFirstVisibleMenuItem(){
-        return [selectTasksAction, themeToggleAction, shareListAction, resetAppAction, deleteListAction]
+        return [selectTasksAction, themeToggleAction, shareListAction, resetAppAction, exitAppAction, deleteListAction]
           .find((item)=> item && !item.hidden && item.style.display !== 'none' && !item.disabled);
       }
 
@@ -1395,6 +1398,7 @@
         setMenuItemVisible(themeToggleAction, isListsScreen);
         setMenuItemVisible(shareListAction, isListDetailScreen);
         setMenuItemVisible(resetAppAction, isListsScreen);
+        setMenuItemVisible(exitAppAction, isListsScreen);
         setMenuItemVisible(deleteListAction, isListDetailScreen);
         setAppMenuVisibility(isListsScreen || isListDetailScreen);
       }
@@ -2528,12 +2532,12 @@
 
       function updateThemeToggleLabel(){
         if(!themeToggleAction){ return; }
-        const labels = {
-          system: 'Tema: Sistema',
-          light: 'Tema: Claro',
-          dark: 'Tema: Escuro'
-        };
-        themeToggleAction.textContent = labels[normalizeThemePreference(themePreference)] || labels.system;
+        const currentPreference = normalizeThemePreference(themePreference);
+        themeToggleAction.querySelectorAll('[data-theme-value]').forEach((button)=>{
+          const active = button.dataset.themeValue === currentPreference;
+          button.classList.toggle('active', active);
+          button.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
       }
 
       function applyTheme(preference, options){
@@ -2561,13 +2565,6 @@
           themePreference = 'system';
         }
         applyTheme(themePreference);
-      }
-
-      function cycleThemePreference(){
-        const order = ['system', 'light', 'dark'];
-        const currentIndex = Math.max(order.indexOf(normalizeThemePreference(themePreference)), 0);
-        const nextPreference = order[(currentIndex + 1) % order.length];
-        applyTheme(nextPreference, { persist:true, announce:true });
       }
 
       function hideAppMenu(){
@@ -2779,6 +2776,20 @@
         } finally {
           location.reload();
         }
+      }
+
+      function exitInstalledApp(){
+        try{ window.close(); }catch(_){ }
+        setTimeout(()=>{
+          try{
+            if(document.visibilityState === 'hidden'){ return; }
+            if(window.history && window.history.length > 1){
+              window.history.back();
+              return;
+            }
+            showToast('Use o gesto ou botão do sistema para sair.', { type: 'success' });
+          }catch(_){ }
+        }, 220);
       }
 
       async function attemptCopyShareCode(){
@@ -3001,6 +3012,38 @@
         { id: 'active', label: 'A fazer' },
         { id: 'done', label: 'Concluídas' }
       ];
+      const TASK_FILTER_IDS = new Set(TASK_FILTERS.map((filter)=> filter.id));
+
+      function normalizeTaskFilter(value){
+        return TASK_FILTER_IDS.has(value) ? value : 'all';
+      }
+
+      function loadTaskFilterState(){
+        try{
+          const raw = localStorage.getItem(TASK_FILTER_STORAGE_KEY);
+          const parsed = raw ? JSON.parse(raw) : {};
+          taskFilterByList = (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+        }catch(_){
+          taskFilterByList = {};
+        }
+      }
+
+      function saveTaskFilterState(){
+        try{ localStorage.setItem(TASK_FILTER_STORAGE_KEY, JSON.stringify(taskFilterByList || {})); }catch(_){ }
+      }
+
+      function getStoredTaskFilter(listId){
+        if(!listId){ return 'all'; }
+        return normalizeTaskFilter(taskFilterByList[listId]);
+      }
+
+      function setStoredTaskFilter(listId, filterId){
+        if(!listId){ return; }
+        const normalized = normalizeTaskFilter(filterId);
+        if(normalized === 'all'){ delete taskFilterByList[listId]; }
+        else { taskFilterByList[listId] = normalized; }
+        saveTaskFilterState();
+      }
 
       function createPriorityFlagSvg(){
         const svg = document.createElementNS(SVG_NS, 'svg');
@@ -3092,6 +3135,7 @@
       function renderTaskFilterChips(counts){
         if(!taskFilterChips){ return; }
         taskFilterChips.innerHTML = '';
+        taskFilterChips.dataset.currentFilter = currentTaskFilter;
         TASK_FILTERS.forEach((filter)=>{
           const button = document.createElement('button');
           button.type = 'button';
@@ -3111,6 +3155,7 @@
           button.addEventListener('click', ()=>{
             if(currentTaskFilter === filter.id){ return; }
             currentTaskFilter = filter.id;
+            setStoredTaskFilter(currentListId, filter.id);
             renderTasks();
           });
           taskFilterChips.appendChild(button);
@@ -3466,7 +3511,7 @@
         currentListId = id;
         isSelectionMode = false;
         selectedTaskIds = new Set();
-        currentTaskFilter = 'all';
+        currentTaskFilter = getStoredTaskFilter(id);
         const list = lists.find(x=>x.id===id);
         currentListName.textContent = list ? list.title : 'Lista';
         renderTasks();
@@ -3749,6 +3794,9 @@
         };
         if(!TASK_FILTERS.some((filter)=> filter.id === currentTaskFilter)){
           currentTaskFilter = 'all';
+        }
+        if(document && document.body){
+          document.body.classList.toggle('task-filter-done-active', currentTaskFilter === 'done');
         }
         renderListSummaryChips(visibleTasks.length);
         renderTaskFilterChips(counts);
@@ -4341,15 +4389,23 @@
         });
       }
 
-      // task detail checkbox toggle (without leaving screen)
+      // task detail checkbox toggle
       taskDetailCheckbox.addEventListener('click', ()=>{
         if(!currentTaskId || !currentListId) return;
         const list = lists.find(x=>x.id===currentListId); if(!list) return;
         const task = findTaskById(list, currentTaskId, false); if(!task) return;
         const newDone = !task.done;
+        const toggledTaskId = currentTaskId;
+        const toggledListId = currentListId;
         // animate
         taskDetailCheckbox.classList.add('pop');
-        setTimeout(()=>{ taskDetailCheckbox.classList.remove('pop'); toggleTaskDone(currentTaskId, newDone); }, 180);
+        setTimeout(()=>{
+          taskDetailCheckbox.classList.remove('pop');
+          toggleTaskDone(toggledTaskId, newDone);
+          if(newDone && screenTaskDetail.classList.contains('active') && currentTaskId===toggledTaskId){
+            try{ window.history.back(); }catch(_){ openList(toggledListId, { fromHistory:true }); }
+          }
+        }, 180);
       });
 
       if(cameraPhotoButton){
@@ -4468,8 +4524,10 @@
         });
       }
       if(themeToggleAction){
-        themeToggleAction.addEventListener('click', ()=>{
-          cycleThemePreference();
+        themeToggleAction.addEventListener('click', (event)=>{
+          const button = event.target.closest('[data-theme-value]');
+          if(!button || !themeToggleAction.contains(button)){ return; }
+          applyTheme(button.dataset.themeValue, { persist:true, announce:true });
           hideAppMenu();
         });
       }
@@ -4497,12 +4555,18 @@
         resetAppAction.addEventListener('click', async ()=>{
           hideAppMenu();
           const confirmReset = await showConfirmDialog({
-            title: 'Resetar aplicativo',
+            title: 'Limpar cache local',
             message: 'Isso limpará todos os dados locais e recarregará o app. Deseja continuar?',
-            confirmText: 'Resetar',
+            confirmText: 'Limpar',
             cancelText: 'Cancelar'
           });
           if(confirmReset){ await resetApp(); }
+        });
+      }
+      if(exitAppAction){
+        exitAppAction.addEventListener('click', ()=>{
+          hideAppMenu();
+          exitInstalledApp();
         });
       }
       shareCopyBtn.addEventListener('click', attemptCopyShareCode);
@@ -5283,6 +5347,7 @@
       loadPhotoSyncState();
       loadCompletedCollapseState();
       loadLocalOrderState();
+      loadTaskFilterState();
       renderLists();
       updateSubtitle();
       updateAppBar(screenLists);
