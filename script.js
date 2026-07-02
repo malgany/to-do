@@ -3456,6 +3456,7 @@
       function resetQuickListBuilder(){
         activeQuickTemplateId = null;
         activeQuickGroupId = null;
+        quickSelectionState = {};
         pendingQuickListTaskTexts = [];
         renderQuickList();
       }
@@ -4075,9 +4076,10 @@
 
       function createListFromModal(){
         const title = listNameInput.value.trim(); if(!title) return;
+        const isQuickListCreation = modalBackdrop.dataset.mode === 'createFromQuickList';
         const id = 'l_'+Date.now();
         const ts = nowTs();
-        const initialTexts = modalBackdrop.dataset.mode === 'createFromQuickList'
+        const initialTexts = isQuickListCreation
           ? pendingQuickListTaskTexts.slice()
           : [];
         const tasks = initialTexts.map((text, index)=>{
@@ -4101,7 +4103,14 @@
         ensureListStructure(newList);
         lists.push(newList);
         updateLocalOrderForList(id);
-        saveState(); renderLists(); closeModal(); openList(id);
+        saveState();
+        renderLists();
+        closeModal();
+        if(isQuickListCreation){
+          resetQuickListBuilder();
+          replaceHistoryState(SCREEN_KEYS.LISTS, { isRoot:false });
+        }
+        openList(id);
       }
 
       function saveRenameFromModal(){
