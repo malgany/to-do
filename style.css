@@ -421,23 +421,28 @@ header.appbar{
 .quick-template-card{
   appearance:none;
   width:100%;
-  min-height:84px;
-  border:1px solid rgba(226,232,240,0.9);
+  min-height:118px;
+  border:1px solid rgba(255,255,255,0.46);
   border-radius:14px;
-  background:var(--card);
-  color:var(--text);
-  display:grid;
-  grid-template-columns:54px minmax(0,1fr) 34px;
+  background-image:
+    linear-gradient(90deg, rgba(10,16,28,0.88) 0%, rgba(10,16,28,0.68) 48%, rgba(10,16,28,0.20) 100%),
+    var(--quick-template-bg);
+  background-color:#101722;
+  background-position:center;
+  background-size:cover;
+  color:#fff;
+  display:flex;
   align-items:center;
-  gap:14px;
-  padding:14px;
+  justify-content:flex-start;
+  padding:18px;
   text-align:left;
   cursor:pointer;
-  box-shadow:0 12px 28px rgba(15,23,42,0.08);
+  box-shadow:0 16px 34px rgba(15,23,42,0.16);
   transition:transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
   touch-action:manipulation;
+  overflow:hidden;
 }
-.quick-template-card:hover{box-shadow:0 16px 34px rgba(15,23,42,0.11)}
+.quick-template-card:hover{box-shadow:0 18px 38px rgba(15,23,42,0.22)}
 .quick-template-card:active{transform:scale(0.99)}
 .quick-template-card:focus-visible{outline:2px solid rgba(47,115,246,0.42);outline-offset:3px}
 .quick-template-icon{
@@ -459,19 +464,22 @@ header.appbar{
   min-width:0;
   display:flex;
   flex-direction:column;
-  gap:4px;
+  gap:5px;
+  max-width:72%;
 }
 .quick-template-title{
-  color:var(--text);
-  font-size:18px;
+  color:#fff;
+  font-size:20px;
   font-weight:800;
   line-height:1.25;
+  text-shadow:0 2px 10px rgba(0,0,0,0.28);
 }
 .quick-template-subtitle{
-  color:var(--muted);
+  color:rgba(255,255,255,0.84);
   font-size:13px;
-  font-weight:600;
+  font-weight:700;
   line-height:1.3;
+  text-shadow:0 2px 8px rgba(0,0,0,0.24);
 }
 .quick-template-count{
   justify-self:end;
@@ -2062,19 +2070,27 @@ html:not(.dark) body.list-detail-screen-active .tasks-empty-state{
 }
 
 .dark .quick-list-title,
-.dark .quick-template-title,
 .dark .quick-accordion-title,
 .dark .quick-item-name{
   color:#F8FAFC;
 }
 .dark .quick-list-subtitle,
-.dark .quick-template-subtitle,
 .dark .quick-item-detail,
 .dark .quick-stepper-unit,
 .dark .quick-save-summary{
   color:#94A3B8;
 }
-.dark .quick-template-card,
+.dark .quick-template-title{
+  color:#fff;
+}
+.dark .quick-template-subtitle{
+  color:rgba(255,255,255,0.84);
+}
+.dark .quick-template-card{
+  border-color:rgba(255,255,255,0.16);
+  background-color:#101722;
+  box-shadow:0 16px 34px rgba(0,0,0,0.24);
+}
 .dark .quick-accordion-group{
   border-color:#253247;
   background:#101722;

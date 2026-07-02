@@ -348,6 +348,7 @@
           id: 'mercado',
           title: 'Mercado',
           subtitle: 'Despensa, feira, carnes e casa',
+          image: './assets/quick-lists/quick-market.jpg',
           groups: [
             {
               id: 'basicos',
@@ -457,6 +458,7 @@
           id: 'farmacia',
           title: 'Farmácia',
           subtitle: 'Remédios, bebê e cuidados',
+          image: './assets/quick-lists/quick-pharmacy.jpg',
           groups: [
             {
               id: 'medicamentos',
@@ -509,6 +511,7 @@
           id: 'pet',
           title: 'Pet',
           subtitle: 'Alimentação, proteção e saúde',
+          image: './assets/quick-lists/quick-pet.jpg',
           groups: [
             {
               id: 'alimentacao',
@@ -3563,18 +3566,15 @@
         if(!quickTemplateGrid){ return; }
         quickTemplateGrid.innerHTML = '';
         quickTemplateGrid.hidden = false;
-        QUICK_LIST_TEMPLATES.forEach((template, index)=>{
-          const itemCount = (template.groups || []).reduce((total, group)=> total + ((group.items || []).length), 0);
+        QUICK_LIST_TEMPLATES.forEach((template)=>{
           const card = document.createElement('button');
           card.type = 'button';
           card.className = 'quick-template-card';
-          card.setAttribute('aria-label', `${template.title}, ${formatListTaskCount(itemCount)}`);
+          card.setAttribute('aria-label', `${template.title}. ${template.subtitle || ''}`.trim());
+          if(template.image){
+            card.style.setProperty('--quick-template-bg', `url("${template.image}")`);
+          }
           card.addEventListener('click', ()=> openQuickTemplate(template.id));
-
-          const icon = document.createElement('span');
-          icon.className = 'quick-template-icon';
-          icon.textContent = getListInitials(template.title);
-          applyListInitialGradient(icon, { id: template.id, title: template.title }, index);
 
           const content = document.createElement('span');
           content.className = 'quick-template-content';
@@ -3583,17 +3583,11 @@
           title.textContent = template.title;
           const subtitle = document.createElement('span');
           subtitle.className = 'quick-template-subtitle';
-          subtitle.textContent = template.subtitle || formatListTaskCount(itemCount);
+          subtitle.textContent = template.subtitle || '';
           content.appendChild(title);
           content.appendChild(subtitle);
 
-          const count = document.createElement('span');
-          count.className = 'quick-template-count';
-          count.textContent = String(itemCount);
-
-          card.appendChild(icon);
           card.appendChild(content);
-          card.appendChild(count);
           quickTemplateGrid.appendChild(card);
         });
       }
