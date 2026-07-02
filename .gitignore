@@ -4,4 +4,4 @@
 /node_modules
 /report
 /data
-
+.local-server*.log

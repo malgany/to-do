@@ -26,7 +26,7 @@
       }catch(_){ }
     })();
   </script>
-  <link rel="stylesheet" href="style.css?v=1.2.1" />
+  <link rel="stylesheet" href="style.css?v=1.2.4" />
   <!-- Google tag (gtag.js) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-E132M7DYY4"></script>
   <script>
@@ -105,7 +105,34 @@
         <span class="icon">＋</span>
         <span class="sr-only">Nova lista</span>
       </button>
+      <button id="btnQuickList" class="fab-secondary" type="button" aria-label="Criar lista rápida">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span class="sr-only">Pré-listas</span>
+      </button>
     </main>
+
+    <!-- Screen: Quick Lists -->
+    <section id="screenQuickList" class="screen quick-list-screen" aria-label="Pré-listas">
+      <div class="quick-list-shell">
+        <div class="quick-list-header">
+          <div>
+            <h1 id="quickListTitle" class="quick-list-title">Pré-listas</h1>
+            <p id="quickListSubtitle" class="quick-list-subtitle">Mercado, farmácia e pet</p>
+          </div>
+          <span id="quickListSelectedCount" class="quick-list-selected-count" hidden>0</span>
+        </div>
+        <div id="quickTemplateGrid" class="quick-template-grid" aria-label="Modelos de lista"></div>
+        <div id="quickBuilder" class="quick-builder" hidden>
+          <div id="quickAccordion" class="quick-accordion"></div>
+          <div class="quick-save-bar">
+            <div class="quick-save-summary" id="quickSaveSummary">0 itens selecionados</div>
+            <button id="quickSaveButton" class="btn primary quick-save-button" type="button" disabled>Salvar lista</button>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <!-- Screen: Single List -->
     <section id="screenListDetail" class="screen" aria-label="Detalhes da Lista">
@@ -920,6 +947,6 @@
   </script>
   
   <script src="vendor/sortable.min.js?v=1.15.0"></script>
-  <script src="script.js?v=1.4.3"></script>
+  <script src="script.js?v=1.4.8"></script>
 </body>
 </html>

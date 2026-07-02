@@ -3,6 +3,10 @@
       let lists = []; // {id, title, tasks: [{id,text,done,photos:[], ...syncMeta}]} 
       let currentListId = null;
       let currentTaskId = null;
+      let activeQuickTemplateId = null;
+      let activeQuickGroupId = null;
+      let quickSelectionState = {};
+      let pendingQuickListTaskTexts = [];
       let completedCollapsed = false;
       const LIST_STORAGE_KEY = 'todo_lists_v4';
       const LEGACY_LIST_STORAGE_KEY = 'todo_lists_v3';
@@ -265,13 +269,23 @@
 
       // Elements
       const screenLists = el('screenLists');
+      const screenQuickList = el('screenQuickList');
       const screenListDetail = el('screenListDetail');
       const screenTaskDetail = el('screenTaskDetail');
       const listsContainer = el('listsContainer');
       const noLists = el('noLists');
       const btnNewList = el('btnNewList');
+      const btnQuickList = el('btnQuickList');
       const btnImportCode = el('btnImportCode');
       const emptyStateCta = noLists ? noLists.querySelector('.empty-cta') : null;
+      const quickListTitle = el('quickListTitle');
+      const quickListSubtitle = el('quickListSubtitle');
+      const quickListSelectedCount = el('quickListSelectedCount');
+      const quickTemplateGrid = el('quickTemplateGrid');
+      const quickBuilder = el('quickBuilder');
+      const quickAccordion = el('quickAccordion');
+      const quickSaveSummary = el('quickSaveSummary');
+      const quickSaveButton = el('quickSaveButton');
       const modalBackdrop = el('modalBackdrop');
       const modalTitle = el('modalTitle');
       const listNameInput = el('listNameInput');
@@ -329,6 +343,202 @@
         gallery: createHiddenPhotoInput({})
       };
       const pendingDeleteUndos = new Map();
+      const QUICK_LIST_TEMPLATES = [
+        {
+          id: 'mercado',
+          title: 'Mercado',
+          subtitle: 'Despensa, feira, carnes e casa',
+          groups: [
+            {
+              id: 'basicos',
+              title: 'Básicos',
+              items: [
+                { id: 'arroz-integral', name: 'Arroz integral', unitSingular: 'pacote', unitPlural: 'pacotes' },
+                { id: 'feijao', name: 'Feijão', quantity: 2, unitSingular: 'pacote', unitPlural: 'pacotes' },
+                { id: 'trigo-integral', name: 'Trigo integral', unitSingular: 'pacote', unitPlural: 'pacotes' },
+                { id: 'oleo-cozinha', name: 'Óleo de cozinha', unitSingular: 'unidade', unitPlural: 'unidades' },
+                { id: 'macarrao', name: 'Macarrão', quantity: 2, unitSingular: 'pacote', unitPlural: 'pacotes' }
+              ]
+            },
+            {
+              id: 'padaria-cafe',
+              title: 'Padaria e café',
+              items: [
+                { id: 'pao', name: 'Pão' },
+                { id: 'cafe-capsula', name: 'Café cápsula', detail: 'descafeinado, se tiver', taskText: 'Café cápsula descafeinado, se tiver' },
+                { id: 'leite', name: 'Leite', quantity: 2, unitSingular: 'unidade', unitPlural: 'unidades' },
+                { id: 'biscoito-agua-sal', name: 'Biscoito água e sal', unitSingular: 'pacote', unitPlural: 'pacotes' },
+                { id: 'biscoito-sequilhos', name: 'Biscoito sequilhos', unitSingular: 'pacote', unitPlural: 'pacotes' },
+                { id: 'biscoito-polvilho-alice', name: 'Biscoito de polvilho', detail: 'para Alice', taskText: 'Biscoito de polvilho para Alice', unitSingular: 'pacote', unitPlural: 'pacotes' },
+                { id: 'geleia', name: 'Geleia', detail: 'morango ou outro sabor para matcha' },
+                { id: 'amendoim-japones', name: 'Amendoim japonês', unitSingular: 'pacote', unitPlural: 'pacotes' },
+                { id: 'cha-camomila', name: 'Chá de camomila', unitSingular: 'caixa', unitPlural: 'caixas' },
+                { id: 'cha-capim-cidreira', name: 'Chá de capim cidreira', unitSingular: 'caixa', unitPlural: 'caixas' },
+                { id: 'cha-mate', name: 'Chá de mate', unitSingular: 'caixa', unitPlural: 'caixas' },
+                { id: 'cacau-50', name: 'Cacau 50%' }
+              ]
+            },
+            {
+              id: 'hortifruti',
+              title: 'Hortifruti',
+              items: [
+                { id: 'uva', name: 'Uva' },
+                { id: 'banana', name: 'Banana' },
+                { id: 'limao', name: 'Limão' },
+                { id: 'alho', name: 'Alho', quantity: 4, unitSingular: 'cabeça', unitPlural: 'cabeças' },
+                { id: 'cebola', name: 'Cebola', quantity: 3, unitSingular: 'unidade', unitPlural: 'unidades' },
+                { id: 'alho-poro', name: 'Alho-poró' },
+                { id: 'milho-verde', name: 'Milho verde', unitSingular: 'unidade', unitPlural: 'unidades' },
+                { id: 'ervilha-congelada', name: 'Ervilha congelada', unitSingular: 'pacote', unitPlural: 'pacotes' },
+                { id: 'seleta-legumes', name: 'Seleta de legumes congelada', unitSingular: 'pacote', unitPlural: 'pacotes' }
+              ]
+            },
+            {
+              id: 'carnes-frios',
+              title: 'Carnes e frios',
+              items: [
+                { id: 'carne-moida', name: 'Carne moída', unitSingular: 'kg', unitPlural: 'kg', alwaysShowUnit: true },
+                { id: 'peito-frango', name: 'Peito de frango', unitSingular: 'kg', unitPlural: 'kg', alwaysShowUnit: true },
+                { id: 'coxa-sobrecoxa', name: 'Coxa e sobrecoxa de frango', unitSingular: 'kg', unitPlural: 'kg', alwaysShowUnit: true },
+                { id: 'presunto-fatiado', name: 'Presunto fatiado', unitSingular: 'g', unitPlural: 'g', quantity: 200, step: 100, min: 100, max: 1000, alwaysShowUnit: true },
+                { id: 'ovos', name: 'Ovos', unitSingular: 'dúzia', unitPlural: 'dúzias', alwaysShowUnit: true }
+              ]
+            },
+            {
+              id: 'laticinios-conservas',
+              title: 'Laticínios e conservas',
+              items: [
+                { id: 'creme-leite', name: 'Creme de leite', quantity: 2, unitSingular: 'unidade', unitPlural: 'unidades' },
+                { id: 'requeijao', name: 'Requeijão' },
+                { id: 'queijo-parmesao', name: 'Queijo parmesão ralado', detail: 'para macarrão' },
+                { id: 'cogumelo', name: 'Cogumelo champignon em conserva' },
+                { id: 'azeitona', name: 'Azeitona sem caroço' }
+              ]
+            },
+            {
+              id: 'temperos-molhos',
+              title: 'Temperos e molhos',
+              items: [
+                { id: 'tempero-fit-frango', name: 'Tempero Fit Frango BR Spices' },
+                { id: 'tempero-dry-rub', name: 'Tempero Dry Rub BR Spices' },
+                { id: 'tempero-caldo-legumes', name: 'Tempero Caldo de Legumes BR Spices' },
+                { id: 'tempero-chimichurri', name: 'Tempero Chimichurri' },
+                { id: 'molho-ingles', name: 'Molho inglês' }
+              ]
+            },
+            {
+              id: 'limpeza',
+              title: 'Limpeza',
+              items: [
+                { id: 'papel-toalha-banheiro', name: 'Papel toalha', detail: 'para o banheiro' },
+                { id: 'papel-higienico', name: 'Papel higiênico' },
+                { id: 'luva-louca', name: 'Luva de borracha para lavar louça G' },
+                { id: 'saco-lixo-15', name: 'Saco de lixo 15 L', unitSingular: 'rolo', unitPlural: 'rolos' },
+                { id: 'saco-lixo-30', name: 'Saco de lixo 30 L', unitSingular: 'rolo', unitPlural: 'rolos' },
+                { id: 'saco-lixo-100', name: 'Saco de lixo 100 L', unitSingular: 'rolo', unitPlural: 'rolos' },
+                { id: 'sabao-lava-louca', name: 'Sabão para máquina de lavar louça' },
+                { id: 'detergente-neutro', name: 'Detergente neutro', detail: 'sem ser da Ypê' },
+                { id: 'sabao-liquido-roupa', name: 'Sabão líquido para lavar roupa', detail: 'Ariel ou Olá roupas delicadas' }
+              ]
+            },
+            {
+              id: 'higiene',
+              title: 'Higiene pessoal',
+              items: [
+                { id: 'absorvente-abas', name: 'Absorvente com abas Sempre Livre' },
+                { id: 'creme-rosto-nivea', name: 'Creme para o rosto Nívea' },
+                { id: 'sabonete', name: 'Sabonete' },
+                { id: 'shampoo-elseve', name: 'Shampoo Elseve Óleo Extraordinário' }
+              ]
+            }
+          ]
+        },
+        {
+          id: 'farmacia',
+          title: 'Farmácia',
+          subtitle: 'Remédios, bebê e cuidados',
+          groups: [
+            {
+              id: 'medicamentos',
+              title: 'Medicamentos',
+              items: [
+                { id: 'dipirona-gotas', name: 'Dipirona em gotas adulto' },
+                { id: 'advil', name: 'Advil' },
+                { id: 'histamin', name: 'Histamin' },
+                { id: 'alopurinol', name: 'Alopurinol 100mg' },
+                { id: 'soro-fisiologico', name: 'Soro fisiológico' }
+              ]
+            },
+            {
+              id: 'suplementos',
+              title: 'Suplementos',
+              items: [
+                { id: 'feminis', name: 'Feminis suplemento alimentar cápsulas' },
+                { id: 'zirvit-kids', name: 'Zirvit Kids Max', detail: 'suplemento alimentar em suspensão' }
+              ]
+            },
+            {
+              id: 'bebe-crianca',
+              title: 'Bebê e criança',
+              items: [
+                { id: 'bepantol-baby', name: 'Bepantol Baby' },
+                { id: 'lenco-johnson-rn', name: 'Lenço umedecido Johnson recém-nascido', detail: '96 folhas' },
+                { id: 'escova-dentes-2-anos', name: 'Escova de dentes 2 anos +' },
+                { id: 'papinha-papapa', name: 'Papinha Papapá' },
+                { id: 'biscoito-papapa', name: 'Biscoito Papapá' }
+              ]
+            },
+            {
+              id: 'pele-banho',
+              title: 'Pele e banho',
+              items: [
+                { id: 'gel-banho-mustela', name: 'Gel de banho Mustela cabelo e corpo' },
+                { id: 'hidratante-infantil', name: 'Hidratante infantil', detail: 'Mustela Stelatopia+, CeraVe ou Cetaphil', taskText: 'Hidratante Mustela Stelatopia+, CeraVe ou Cetaphil' }
+              ]
+            },
+            {
+              id: 'maternidade',
+              title: 'Maternidade',
+              items: [
+                { id: 'absorvente-seios', name: 'Absorvente para os seios' }
+              ]
+            }
+          ]
+        },
+        {
+          id: 'pet',
+          title: 'Pet',
+          subtitle: 'Alimentação, proteção e saúde',
+          groups: [
+            {
+              id: 'alimentacao',
+              title: 'Alimentação',
+              items: [
+                { id: 'racao-senior', name: 'Ração sênior' },
+                { id: 'racao-senior-golden', name: 'Ração sênior Golden' }
+              ]
+            },
+            {
+              id: 'antiparasitarios',
+              title: 'Antiparasitários',
+              items: [
+                { id: 'coleira-leishmania', name: 'Coleira de leishmania' },
+                { id: 'bravecto', name: 'Bravecto' },
+                { id: 'vermifugo-topdog-milbemax', name: 'Top Dog vermífugo 10kg ou Milbemax 5 a 25kg' }
+              ]
+            },
+            {
+              id: 'saude',
+              title: 'Saúde',
+              items: [
+                { id: 'ograx-derme', name: 'Ograx Derme 10' },
+                { id: 'gaviz', name: 'Gaviz 10mg' },
+                { id: 'hepvet', name: 'Hepvet' }
+              ]
+            }
+          ]
+        }
+      ];
       let isSelectionMode = false;
       let selectedTaskIds = new Set();
       let activePhotoId = null;
@@ -604,6 +814,7 @@
 
       const SCREEN_KEYS = Object.freeze({
         LISTS: 'lists',
+        QUICK_LIST: 'quickList',
         LIST_DETAIL: 'listDetail',
         TASK_DETAIL: 'taskDetail'
       });
@@ -671,6 +882,9 @@
             hideComposer();
             showScreen(screenLists);
             renderLists();
+            break;
+          case SCREEN_KEYS.QUICK_LIST:
+            openQuickList({ fromHistory:true });
             break;
           case SCREEN_KEYS.LIST_DETAIL:
             if(state.listId && lists.some(l=>l.id===state.listId)){
@@ -860,7 +1074,7 @@
             if(currentListId === list.id){
               currentListName.textContent = list.title;
               renderTasks();
-              const activeScreen = [screenTaskDetail, screenListDetail, screenLists]
+              const activeScreen = [screenTaskDetail, screenListDetail, screenQuickList, screenLists]
                 .find((screen)=>screen && screen.classList && screen.classList.contains('active'))
                 || screenLists;
               updateAppBar(activeScreen);
@@ -1362,7 +1576,7 @@
         if(screen!==screenListDetail && isSelectionMode){
           exitSelectionMode({ rerender:false });
         }
-        [screenLists, screenListDetail, screenTaskDetail].forEach(s=>s.classList.remove('active'));
+        [screenLists, screenQuickList, screenListDetail, screenTaskDetail].forEach(s=>{ if(s){ s.classList.remove('active'); } });
         screen.classList.add('active');
         updateAppBar(screen);
       }
@@ -1406,6 +1620,7 @@
       function updateAppBar(activeScreen){
         if(document && document.body){
           document.body.classList.toggle('lists-screen-active', activeScreen===screenLists);
+          document.body.classList.toggle('quick-list-screen-active', activeScreen===screenQuickList);
           document.body.classList.toggle('list-detail-screen-active', activeScreen===screenListDetail);
           document.body.classList.toggle('task-detail-screen-active', activeScreen===screenTaskDetail);
         }
@@ -1415,14 +1630,25 @@
           appTitle.hidden = false;
           appTitle.textContent = DEFAULT_TITLE;
           btnNewList.hidden = false;
+          if(btnQuickList){ btnQuickList.hidden = false; }
           if(appSubtitle){ appSubtitle.hidden = false; }
           if(btnImportCode){ btnImportCode.style.display = ""; }
+          configureAppMenuForScreen(activeScreen);
+        } else if(activeScreen===screenQuickList){
+          globalBackBtn.hidden = false;
+          appTitle.hidden = true;
+          appTitle.textContent = '';
+          btnNewList.hidden = true;
+          if(btnQuickList){ btnQuickList.hidden = true; }
+          if(appSubtitle){ appSubtitle.hidden = true; }
+          if(btnImportCode){ btnImportCode.style.display = "none"; }
           configureAppMenuForScreen(activeScreen);
         } else if(activeScreen===screenListDetail){
           globalBackBtn.hidden = false;
           appTitle.hidden = true;
           appTitle.textContent = '';
           btnNewList.hidden = true;
+          if(btnQuickList){ btnQuickList.hidden = true; }
           if(appSubtitle){ appSubtitle.hidden = true; }
           if(btnImportCode){ btnImportCode.style.display = "none"; }
           configureAppMenuForScreen(activeScreen);
@@ -1438,6 +1664,7 @@
           appTitle.hidden = true;
           appTitle.textContent = '';
           btnNewList.hidden = true;
+          if(btnQuickList){ btnQuickList.hidden = true; }
           if(appSubtitle){ appSubtitle.hidden = true; }
           if(btnImportCode){ btnImportCode.style.display = "none"; }
           configureAppMenuForScreen(activeScreen);
@@ -2390,7 +2617,7 @@
             if(currentListId === list.id){
               currentListName.textContent = list.title;
               renderTasks();
-              const activeScreen = [screenTaskDetail, screenListDetail, screenLists]
+              const activeScreen = [screenTaskDetail, screenListDetail, screenQuickList, screenLists]
                 .find((screen)=>screen && screen.classList && screen.classList.contains('active'))
                 || screenLists;
               updateAppBar(activeScreen);
@@ -3162,6 +3389,361 @@
         });
       }
 
+      function getQuickTemplateById(templateId){
+        return QUICK_LIST_TEMPLATES.find((template)=> template && template.id===templateId) || null;
+      }
+
+      function getQuickItemKey(groupId, itemId){
+        return `${groupId}:${itemId}`;
+      }
+
+      function getQuickSelectionBucket(templateId){
+        if(!templateId){ return {}; }
+        if(!quickSelectionState || typeof quickSelectionState !== 'object'){ quickSelectionState = {}; }
+        if(!quickSelectionState[templateId]){
+          quickSelectionState[templateId] = {};
+        }
+        return quickSelectionState[templateId];
+      }
+
+      function getQuickItemDefaultQuantity(item){
+        const value = Number(item && item.quantity);
+        return Number.isFinite(value) && value > 0 ? value : 1;
+      }
+
+      function getQuickItemStep(item){
+        const value = Number(item && item.step);
+        return Number.isFinite(value) && value > 0 ? value : 1;
+      }
+
+      function clampQuickItemQuantity(item, value){
+        const step = getQuickItemStep(item);
+        const min = Number.isFinite(Number(item && item.min)) ? Number(item.min) : step;
+        const max = Number.isFinite(Number(item && item.max)) ? Number(item.max) : 99;
+        const numeric = Number(value);
+        const safe = Number.isFinite(numeric) ? numeric : getQuickItemDefaultQuantity(item);
+        return Math.min(max, Math.max(min, safe));
+      }
+
+      function getQuickItemState(templateId, groupId, item){
+        const bucket = getQuickSelectionBucket(templateId);
+        const key = getQuickItemKey(groupId, item && item.id);
+        if(!bucket[key]){
+          bucket[key] = {
+            selected: false,
+            quantity: getQuickItemDefaultQuantity(item)
+          };
+        }
+        bucket[key].quantity = clampQuickItemQuantity(item, bucket[key].quantity);
+        return bucket[key];
+      }
+
+      function countQuickSelectionsForGroup(template, group){
+        if(!template || !group){ return 0; }
+        const bucket = getQuickSelectionBucket(template.id);
+        return (group.items || []).reduce((total, item)=>{
+          const state = bucket[getQuickItemKey(group.id, item.id)];
+          return total + (state && state.selected ? 1 : 0);
+        }, 0);
+      }
+
+      function countQuickSelections(templateId){
+        const template = getQuickTemplateById(templateId);
+        if(!template){ return 0; }
+        return (template.groups || []).reduce((total, group)=> total + countQuickSelectionsForGroup(template, group), 0);
+      }
+
+      function resetQuickListBuilder(){
+        activeQuickTemplateId = null;
+        activeQuickGroupId = null;
+        pendingQuickListTaskTexts = [];
+        renderQuickList();
+      }
+
+      function openQuickList(options){
+        const opts = Object.assign({ fromHistory:false }, options||{});
+        currentTaskId = null;
+        currentListId = null;
+        hideComposer();
+        resetQuickListBuilder();
+        showScreen(screenQuickList);
+        if(!opts.fromHistory){
+          pushHistoryState(SCREEN_KEYS.QUICK_LIST);
+        }
+      }
+
+      function openQuickTemplate(templateId){
+        const template = getQuickTemplateById(templateId);
+        if(!template){ return; }
+        activeQuickTemplateId = template.id;
+        activeQuickGroupId = null;
+        renderQuickList();
+      }
+
+      function formatQuickNumber(value){
+        const numeric = Number(value);
+        if(!Number.isFinite(numeric)){ return '1'; }
+        return Number.isInteger(numeric) ? String(numeric) : String(numeric).replace('.', ',');
+      }
+
+      function getQuickUnitLabel(item, quantity){
+        if(item && (item.unitSingular || item.unitPlural)){
+          return quantity === 1
+            ? (item.unitSingular || item.unitPlural)
+            : (item.unitPlural || item.unitSingular);
+        }
+        return quantity === 1 ? 'unidade' : 'unidades';
+      }
+
+      function getQuickItemBaseText(item){
+        if(!item){ return ''; }
+        if(item.taskText){ return String(item.taskText).trim(); }
+        const name = String(item.name || '').trim();
+        const detail = String(item.detail || '').trim();
+        if(detail){ return `${name} ${detail}`.trim(); }
+        return name;
+      }
+
+      function formatQuickListTaskText(item, state){
+        const base = getQuickItemBaseText(item);
+        const quantity = clampQuickItemQuantity(item, state && state.quantity);
+        const hasConfiguredUnit = !!(item && (item.unitSingular || item.unitPlural));
+        const shouldShowQuantity = hasConfiguredUnit
+          ? (item.alwaysShowUnit || quantity !== 1 || getQuickItemDefaultQuantity(item) !== 1)
+          : quantity !== 1;
+        if(!shouldShowQuantity){ return base; }
+        return `${base} - ${formatQuickNumber(quantity)} ${getQuickUnitLabel(item, quantity)}`;
+      }
+
+      function buildQuickListTaskTexts(){
+        const template = getQuickTemplateById(activeQuickTemplateId);
+        if(!template){ return []; }
+        const texts = [];
+        (template.groups || []).forEach((group)=>{
+          (group.items || []).forEach((item)=>{
+            const state = getQuickItemState(template.id, group.id, item);
+            if(state.selected){
+              const text = formatQuickListTaskText(item, state);
+              if(text){ texts.push(text); }
+            }
+          });
+        });
+        return texts;
+      }
+
+      function updateQuickSaveState(){
+        const count = countQuickSelections(activeQuickTemplateId);
+        if(quickSaveSummary){
+          quickSaveSummary.textContent = `${count} ${count === 1 ? 'item selecionado' : 'itens selecionados'}`;
+        }
+        if(quickSaveButton){
+          quickSaveButton.disabled = count === 0;
+        }
+        if(quickListSelectedCount){
+          quickListSelectedCount.hidden = count === 0;
+          quickListSelectedCount.textContent = String(count);
+        }
+      }
+
+      function setQuickItemSelected(templateId, groupId, item, selected){
+        const state = getQuickItemState(templateId, groupId, item);
+        state.selected = !!selected;
+        renderQuickList();
+      }
+
+      function adjustQuickItemQuantity(templateId, groupId, item, direction){
+        const state = getQuickItemState(templateId, groupId, item);
+        const step = getQuickItemStep(item);
+        state.quantity = clampQuickItemQuantity(item, Number(state.quantity) + (direction * step));
+        renderQuickList();
+      }
+
+      function renderQuickTemplateCards(){
+        if(!quickTemplateGrid){ return; }
+        quickTemplateGrid.innerHTML = '';
+        quickTemplateGrid.hidden = false;
+        QUICK_LIST_TEMPLATES.forEach((template, index)=>{
+          const itemCount = (template.groups || []).reduce((total, group)=> total + ((group.items || []).length), 0);
+          const card = document.createElement('button');
+          card.type = 'button';
+          card.className = 'quick-template-card';
+          card.setAttribute('aria-label', `${template.title}, ${formatListTaskCount(itemCount)}`);
+          card.addEventListener('click', ()=> openQuickTemplate(template.id));
+
+          const icon = document.createElement('span');
+          icon.className = 'quick-template-icon';
+          icon.textContent = getListInitials(template.title);
+          applyListInitialGradient(icon, { id: template.id, title: template.title }, index);
+
+          const content = document.createElement('span');
+          content.className = 'quick-template-content';
+          const title = document.createElement('span');
+          title.className = 'quick-template-title';
+          title.textContent = template.title;
+          const subtitle = document.createElement('span');
+          subtitle.className = 'quick-template-subtitle';
+          subtitle.textContent = template.subtitle || formatListTaskCount(itemCount);
+          content.appendChild(title);
+          content.appendChild(subtitle);
+
+          const count = document.createElement('span');
+          count.className = 'quick-template-count';
+          count.textContent = String(itemCount);
+
+          card.appendChild(icon);
+          card.appendChild(content);
+          card.appendChild(count);
+          quickTemplateGrid.appendChild(card);
+        });
+      }
+
+      function renderQuickAccordion(template){
+        if(!quickAccordion || !template){ return; }
+        quickAccordion.innerHTML = '';
+        (template.groups || []).forEach((group)=>{
+          const selectedCount = countQuickSelectionsForGroup(template, group);
+          const groupEl = document.createElement('section');
+          groupEl.className = 'quick-accordion-group';
+          if(activeQuickGroupId === group.id){ groupEl.classList.add('open'); }
+
+          const header = document.createElement('button');
+          header.type = 'button';
+          header.className = 'quick-accordion-header';
+          header.setAttribute('aria-expanded', activeQuickGroupId === group.id ? 'true' : 'false');
+          header.addEventListener('click', ()=>{
+            activeQuickGroupId = activeQuickGroupId === group.id ? null : group.id;
+            renderQuickList();
+          });
+
+          const title = document.createElement('span');
+          title.className = 'quick-accordion-title';
+          title.textContent = group.title;
+          let meta = null;
+          if(selectedCount > 0){
+            meta = document.createElement('span');
+            meta.className = 'quick-accordion-meta';
+            meta.textContent = String(selectedCount);
+          }
+          header.appendChild(title);
+          if(meta){ header.appendChild(meta); }
+          groupEl.appendChild(header);
+
+          const panel = document.createElement('div');
+          panel.className = 'quick-accordion-panel';
+          panel.hidden = activeQuickGroupId !== group.id;
+          (group.items || []).forEach((item)=>{
+            const state = getQuickItemState(template.id, group.id, item);
+            const quantity = clampQuickItemQuantity(item, state.quantity);
+            const row = document.createElement('div');
+            row.className = 'quick-item-row';
+            if(state.selected){ row.classList.add('selected'); }
+            row.tabIndex = 0;
+            row.setAttribute('role', 'checkbox');
+            row.setAttribute('aria-checked', state.selected ? 'true' : 'false');
+            row.addEventListener('click', (event)=>{
+              if(event.target.closest('.quick-stepper')){ return; }
+              setQuickItemSelected(template.id, group.id, item, !state.selected);
+            });
+            row.addEventListener('keydown', (event)=>{
+              if(event.key === 'Enter' || event.key === ' '){
+                event.preventDefault();
+                setQuickItemSelected(template.id, group.id, item, !state.selected);
+              }
+            });
+
+            const check = document.createElement('span');
+            check.className = 'quick-item-check';
+            check.setAttribute('aria-hidden', 'true');
+            check.textContent = state.selected ? '✓' : '';
+
+            const textWrap = document.createElement('span');
+            textWrap.className = 'quick-item-text';
+            const name = document.createElement('span');
+            name.className = 'quick-item-name';
+            name.textContent = item.name;
+            textWrap.appendChild(name);
+            if(item.detail){
+              const detail = document.createElement('span');
+              detail.className = 'quick-item-detail';
+              detail.textContent = item.detail;
+              textWrap.appendChild(detail);
+            }
+
+            const stepper = document.createElement('span');
+            stepper.className = 'quick-stepper';
+            const minus = document.createElement('button');
+            minus.type = 'button';
+            minus.className = 'quick-stepper-button';
+            minus.setAttribute('aria-label', `Diminuir quantidade de ${item.name}`);
+            minus.textContent = '−';
+            minus.addEventListener('click', (event)=>{
+              event.stopPropagation();
+              adjustQuickItemQuantity(template.id, group.id, item, -1);
+            });
+            const value = document.createElement('span');
+            value.className = 'quick-stepper-value';
+            value.textContent = formatQuickNumber(quantity);
+            const unit = document.createElement('span');
+            unit.className = 'quick-stepper-unit';
+            unit.textContent = getQuickUnitLabel(item, quantity);
+            const plus = document.createElement('button');
+            plus.type = 'button';
+            plus.className = 'quick-stepper-button';
+            plus.setAttribute('aria-label', `Aumentar quantidade de ${item.name}`);
+            plus.textContent = '+';
+            plus.addEventListener('click', (event)=>{
+              event.stopPropagation();
+              adjustQuickItemQuantity(template.id, group.id, item, 1);
+            });
+            stepper.appendChild(minus);
+            stepper.appendChild(value);
+            stepper.appendChild(unit);
+            stepper.appendChild(plus);
+
+            row.appendChild(check);
+            row.appendChild(textWrap);
+            row.appendChild(stepper);
+            panel.appendChild(row);
+          });
+          groupEl.appendChild(panel);
+          quickAccordion.appendChild(groupEl);
+        });
+      }
+
+      function renderQuickList(){
+        const template = getQuickTemplateById(activeQuickTemplateId);
+        if(!quickListTitle || !quickListSubtitle || !quickBuilder){ return; }
+        if(!template){
+          quickListTitle.textContent = 'Pré-listas';
+          quickListSubtitle.textContent = 'Mercado, farmácia e pet';
+          if(quickListSelectedCount){ quickListSelectedCount.hidden = true; }
+          if(quickBuilder){ quickBuilder.hidden = true; }
+          renderQuickTemplateCards();
+          updateQuickSaveState();
+          return;
+        }
+        quickListTitle.textContent = template.title;
+        quickListSubtitle.textContent = template.subtitle || '';
+        if(quickTemplateGrid){
+          quickTemplateGrid.hidden = true;
+          quickTemplateGrid.innerHTML = '';
+        }
+        quickBuilder.hidden = false;
+        renderQuickAccordion(template);
+        updateQuickSaveState();
+      }
+
+      function openQuickListNameModal(){
+        const template = getQuickTemplateById(activeQuickTemplateId);
+        if(!template){ return; }
+        pendingQuickListTaskTexts = buildQuickListTaskTexts();
+        if(!pendingQuickListTaskTexts.length){
+          showToast('Selecione pelo menos um item.', { type: 'error' });
+          return;
+        }
+        openModal('createFromQuickList', null, { title: template.title });
+      }
+
       function createDragHandleIconSvg(){
         const svg = document.createElementNS(SVG_NS, 'svg');
         svg.setAttribute('viewBox', '0 0 24 24');
@@ -3292,7 +3874,8 @@
         initSortableLists();
       }
 
-      function openModal(mode, listId){
+      function openModal(mode, listId, options){
+        const opts = Object.assign({ title:'' }, options||{});
         // mode: 'create' or 'rename'
         modalBackdrop.style.display='flex';
         modalBackdrop.classList.add('show');
@@ -3304,6 +3887,12 @@
           modalPrimary.textContent='Criar lista';
           modalPrimary.disabled=true;
           listNameInput.value='';
+        } else if(mode==='createFromQuickList'){
+          modalTitle.textContent='Nova Lista';
+          modalPrimary.textContent='Criar lista';
+          listNameInput.value = String(opts.title || 'Lista').trim() || 'Lista';
+          modalPrimary.disabled = listNameInput.value.trim().length===0;
+          setTimeout(()=>{ listNameInput.focus(); listNameInput.select(); },40);
         } else {
           modalTitle.textContent='Renomear Lista';
           modalPrimary.textContent='Salvar';
@@ -3318,10 +3907,14 @@
       }
 
       function closeModal(){
+        const mode = modalBackdrop.dataset.mode;
         modalBackdrop.classList.remove('show');
         modalBackdrop.style.display='none';
         listNameInput.removeEventListener('input', onModalInput);
         delete modalBackdrop.dataset.mode; delete modalBackdrop.dataset.listId;
+        if(mode==='createFromQuickList'){
+          pendingQuickListTaskTexts = [];
+        }
         clearKeyboardInset();
         unlockScroll();
       }
@@ -3484,9 +4077,30 @@
         const title = listNameInput.value.trim(); if(!title) return;
         const id = 'l_'+Date.now();
         const ts = nowTs();
-        const newList = { id, title, tasks:[], createdAt: ts, metaUpdatedAt: ts, metaUpdatedBy: clientId, clientId, shareCreated:false };
+        const initialTexts = modalBackdrop.dataset.mode === 'createFromQuickList'
+          ? pendingQuickListTaskTexts.slice()
+          : [];
+        const tasks = initialTexts.map((text, index)=>{
+          const task = {
+            id: createTaskId(),
+            text,
+            done:false,
+            photos:[],
+            createdAt: ts + index,
+            textUpdatedAt: ts + index,
+            textUpdatedBy: clientId,
+            doneUpdatedAt: ts + index,
+            doneUpdatedBy: clientId,
+            updatedAt: ts + index,
+            updatedBy: clientId
+          };
+          ensureTaskStructure(task, clientId);
+          return task;
+        });
+        const newList = { id, title, tasks, createdAt: ts, metaUpdatedAt: ts, metaUpdatedBy: clientId, clientId, shareCreated:false };
         ensureListStructure(newList);
         lists.push(newList);
+        updateLocalOrderForList(id);
         saveState(); renderLists(); closeModal(); openList(id);
       }
 
@@ -4480,11 +5094,18 @@
 
       // Events
       btnNewList.addEventListener('click', ()=>{ if(codeBackdrop && codeBackdrop.classList.contains('show')) closeCodeModal(); openModal('create'); });
+      if(btnQuickList){
+        btnQuickList.addEventListener('click', ()=>{
+          if(codeBackdrop && codeBackdrop.classList.contains('show')) closeCodeModal();
+          openQuickList();
+        });
+      }
       if(emptyStateCta){ emptyStateCta.addEventListener('click', ()=>{ btnNewList.click(); }); }
       modalCancel.addEventListener('click', ()=>closeModal());
-      modalPrimary.addEventListener('click', ()=>{ const mode = modalBackdrop.dataset.mode; if(mode==='create') createListFromModal(); else saveRenameFromModal(); });
+      modalPrimary.addEventListener('click', ()=>{ const mode = modalBackdrop.dataset.mode; if(mode==='create' || mode==='createFromQuickList') createListFromModal(); else saveRenameFromModal(); });
       listNameInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter' && !modalPrimary.disabled){ modalPrimary.click(); } });
       modalBackdrop.addEventListener('click', (e)=>{ if(e.target===modalBackdrop) closeModal(); });
+      if(quickSaveButton){ quickSaveButton.addEventListener('click', openQuickListNameModal); }
 
       currentListName.addEventListener('click', ()=>{ if(!currentListId || isSelectionMode) return; openModal('rename', currentListId); setTimeout(()=>{ const len=listNameInput.value.length; listNameInput.setSelectionRange(len,len); },50); });
       currentListName.addEventListener('keydown', (e)=>{ if(e.key==='Enter') currentListName.click(); });
