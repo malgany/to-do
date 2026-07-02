@@ -1,8 +1,8 @@
-const CACHE_NAME = 'todo-pwa-v38';
+const CACHE_NAME = 'todo-pwa-v39';
 const ASSETS = [
   './',
   './index.html',
-  './style.css?v=1.2.5',
+  './style.css?v=1.2.6',
   './script.js?v=1.5.0',
   './vendor/sortable.min.js',
   './manifest.json?v=1.0.1',
