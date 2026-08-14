@@ -354,11 +354,15 @@
               id: 'basicos',
               title: 'Básicos',
               items: [
+                { id: 'arroz-branco', name: 'Arroz branco', unitSingular: 'pacote', unitPlural: 'pacotes' },
                 { id: 'arroz-integral', name: 'Arroz integral', unitSingular: 'pacote', unitPlural: 'pacotes' },
                 { id: 'feijao', name: 'Feijão', quantity: 2, unitSingular: 'pacote', unitPlural: 'pacotes' },
+                { id: 'farinha-trigo', name: 'Farinha de trigo', unitSingular: 'pacote', unitPlural: 'pacotes' },
                 { id: 'trigo-integral', name: 'Trigo integral', unitSingular: 'pacote', unitPlural: 'pacotes' },
                 { id: 'oleo-cozinha', name: 'Óleo de cozinha', unitSingular: 'unidade', unitPlural: 'unidades' },
-                { id: 'macarrao', name: 'Macarrão', quantity: 2, unitSingular: 'pacote', unitPlural: 'pacotes' }
+                { id: 'macarrao', name: 'Macarrão', quantity: 2, unitSingular: 'pacote', unitPlural: 'pacotes' },
+                { id: 'acucar-refinado', name: 'Açúcar refinado', unitSingular: 'pacote', unitPlural: 'pacotes' },
+                { id: 'massa-pastel', name: 'Massa para pastel', unitSingular: 'pacote', unitPlural: 'pacotes' }
               ]
             },
             {
@@ -366,6 +370,7 @@
               title: 'Padaria e café',
               items: [
                 { id: 'pao', name: 'Pão' },
+                { id: 'cafe-po', name: 'Café em pó', unitSingular: 'pacote', unitPlural: 'pacotes' },
                 { id: 'cafe-capsula', name: 'Café cápsula', detail: 'descafeinado, se tiver', taskText: 'Café cápsula descafeinado, se tiver' },
                 { id: 'leite', name: 'Leite', quantity: 2, unitSingular: 'unidade', unitPlural: 'unidades' },
                 { id: 'biscoito-agua-sal', name: 'Biscoito água e sal', unitSingular: 'pacote', unitPlural: 'pacotes' },
@@ -385,10 +390,18 @@
               items: [
                 { id: 'uva', name: 'Uva' },
                 { id: 'banana', name: 'Banana' },
+                { id: 'morango', name: 'Morango' },
+                { id: 'tangerina', name: 'Tangerina' },
                 { id: 'limao', name: 'Limão' },
                 { id: 'alho', name: 'Alho', quantity: 4, unitSingular: 'cabeça', unitPlural: 'cabeças' },
                 { id: 'cebola', name: 'Cebola', quantity: 3, unitSingular: 'unidade', unitPlural: 'unidades' },
                 { id: 'alho-poro', name: 'Alho-poró' },
+                { id: 'batata', name: 'Batata' },
+                { id: 'batata-doce', name: 'Batata-doce' },
+                { id: 'abobora-cabotia', name: 'Abóbora cabotiá' },
+                { id: 'cenoura', name: 'Cenoura' },
+                { id: 'tomate', name: 'Tomate' },
+                { id: 'quiabo', name: 'Quiabo' },
                 { id: 'milho-verde', name: 'Milho verde', unitSingular: 'unidade', unitPlural: 'unidades' },
                 { id: 'ervilha-congelada', name: 'Ervilha congelada', unitSingular: 'pacote', unitPlural: 'pacotes' },
                 { id: 'seleta-legumes', name: 'Seleta de legumes congelada', unitSingular: 'pacote', unitPlural: 'pacotes' }
@@ -402,6 +415,7 @@
                 { id: 'peito-frango', name: 'Peito de frango', unitSingular: 'kg', unitPlural: 'kg', alwaysShowUnit: true },
                 { id: 'coxa-sobrecoxa', name: 'Coxa e sobrecoxa de frango', unitSingular: 'kg', unitPlural: 'kg', alwaysShowUnit: true },
                 { id: 'presunto-fatiado', name: 'Presunto fatiado', unitSingular: 'g', unitPlural: 'g', quantity: 200, step: 100, min: 100, max: 1000, alwaysShowUnit: true },
+                { id: 'mucarela-fatiada', name: 'Queijo muçarela fatiado', unitSingular: 'g', unitPlural: 'g', quantity: 200, step: 100, min: 100, max: 1000, alwaysShowUnit: true },
                 { id: 'ovos', name: 'Ovos', unitSingular: 'dúzia', unitPlural: 'dúzias', alwaysShowUnit: true }
               ]
             },
@@ -411,9 +425,12 @@
               items: [
                 { id: 'creme-leite', name: 'Creme de leite', quantity: 2, unitSingular: 'unidade', unitPlural: 'unidades' },
                 { id: 'requeijao', name: 'Requeijão' },
+                { id: 'iogurte-natural', name: 'Iogurte natural' },
+                { id: 'manteiga', name: 'Manteiga' },
                 { id: 'queijo-parmesao', name: 'Queijo parmesão ralado', detail: 'para macarrão' },
                 { id: 'cogumelo', name: 'Cogumelo champignon em conserva' },
-                { id: 'azeitona', name: 'Azeitona sem caroço' }
+                { id: 'azeitona', name: 'Azeitona sem caroço' },
+                { id: 'palmito', name: 'Palmito' }
               ]
             },
             {
@@ -424,7 +441,10 @@
                 { id: 'tempero-dry-rub', name: 'Tempero Dry Rub BR Spices' },
                 { id: 'tempero-caldo-legumes', name: 'Tempero Caldo de Legumes BR Spices' },
                 { id: 'tempero-chimichurri', name: 'Tempero Chimichurri' },
-                { id: 'molho-ingles', name: 'Molho inglês' }
+                { id: 'molho-ingles', name: 'Molho inglês' },
+                { id: 'azeite', name: 'Azeite' },
+                { id: 'molho-tomate', name: 'Molho de tomate' },
+                { id: 'colorau', name: 'Colorau' }
               ]
             },
             {
@@ -439,7 +459,11 @@
                 { id: 'saco-lixo-100', name: 'Saco de lixo 100 L', unitSingular: 'rolo', unitPlural: 'rolos' },
                 { id: 'sabao-lava-louca', name: 'Sabão para máquina de lavar louça' },
                 { id: 'detergente-neutro', name: 'Detergente neutro', detail: 'sem ser da Ypê' },
-                { id: 'sabao-liquido-roupa', name: 'Sabão líquido para lavar roupa', detail: 'Ariel ou Olá roupas delicadas' }
+                { id: 'sabao-liquido-roupa', name: 'Sabão líquido para lavar roupa', detail: 'Ariel ou Olá roupas delicadas' },
+                { id: 'amaciante', name: 'Amaciante' },
+                { id: 'sabao-liquido-maos', name: 'Sabão líquido para as mãos' },
+                { id: 'limpador-multiuso', name: 'Limpador multiuso' },
+                { id: 'desengordurante-cozinha', name: 'Desengordurante de cozinha' }
               ]
             },
             {
@@ -449,7 +473,9 @@
                 { id: 'absorvente-abas', name: 'Absorvente com abas Sempre Livre' },
                 { id: 'creme-rosto-nivea', name: 'Creme para o rosto Nívea' },
                 { id: 'sabonete', name: 'Sabonete' },
-                { id: 'shampoo-elseve', name: 'Shampoo Elseve Óleo Extraordinário' }
+                { id: 'shampoo-elseve', name: 'Shampoo Elseve Óleo Extraordinário' },
+                { id: 'condicionador', name: 'Condicionador' },
+                { id: 'mascara-hidratacao-capilar', name: 'Máscara de hidratação capilar' }
               ]
             }
           ]
@@ -499,6 +525,22 @@
               ]
             },
             {
+              id: 'primeiros-socorros',
+              title: 'Primeiros socorros',
+              items: [
+                { id: 'curativos-adesivos', name: 'Curativos adesivos', unitSingular: 'caixa', unitPlural: 'caixas' },
+                { id: 'gaze-esteril', name: 'Gaze estéril', unitSingular: 'pacote', unitPlural: 'pacotes' },
+                { id: 'esparadrapo', name: 'Esparadrapo' },
+                { id: 'fita-micropore', name: 'Fita micropore' },
+                { id: 'atadura-crepe', name: 'Atadura de crepe' },
+                { id: 'algodao', name: 'Algodão', unitSingular: 'pacote', unitPlural: 'pacotes' },
+                { id: 'alcool-70', name: 'Álcool 70%' },
+                { id: 'antisseptico', name: 'Antisséptico' },
+                { id: 'termometro-digital', name: 'Termômetro digital' },
+                { id: 'luvas-descartaveis', name: 'Luvas descartáveis', unitSingular: 'caixa', unitPlural: 'caixas' }
+              ]
+            },
+            {
               id: 'maternidade',
               title: 'Maternidade',
               items: [
@@ -517,8 +559,35 @@
               id: 'alimentacao',
               title: 'Alimentação',
               items: [
+                { id: 'racao-seca', name: 'Ração seca' },
+                { id: 'racao-umida', name: 'Ração úmida' },
+                { id: 'petiscos', name: 'Petiscos' },
+                { id: 'comedouro', name: 'Comedouro' },
+                { id: 'bebedouro', name: 'Bebedouro' },
                 { id: 'racao-senior', name: 'Ração sênior' },
                 { id: 'racao-senior-golden', name: 'Ração sênior Golden' }
+              ]
+            },
+            {
+              id: 'passeio-seguranca',
+              title: 'Passeio e segurança',
+              items: [
+                { id: 'coleira-identificacao', name: 'Coleira com identificação' },
+                { id: 'guia', name: 'Guia' },
+                { id: 'peitoral', name: 'Peitoral' },
+                { id: 'caixa-transporte', name: 'Caixa de transporte' }
+              ]
+            },
+            {
+              id: 'casa-higiene',
+              title: 'Casa e higiene',
+              items: [
+                { id: 'cama-pet', name: 'Cama para pet' },
+                { id: 'brinquedos-pet', name: 'Brinquedos para pet' },
+                { id: 'escova-pente-pet', name: 'Escova e pente para pet' },
+                { id: 'escova-dentes-pet', name: 'Escova de dentes para pet' },
+                { id: 'caixa-areia', name: 'Caixa de areia' },
+                { id: 'areia-higienica', name: 'Areia higiênica' }
               ]
             },
             {
@@ -2104,6 +2173,10 @@
         list.clientId = normalizeActor(list.clientId, clientId);
         list.metaUpdatedAt = normalizeTimestamp(list.metaUpdatedAt, normalizeTimestamp(list.updatedAt, nowTs()));
         list.metaUpdatedBy = normalizeActor(list.metaUpdatedBy, list.clientId);
+        list.createdAt = Math.min(
+          normalizeTimestamp(list.createdAt, list.metaUpdatedAt),
+          list.metaUpdatedAt
+        );
         if(typeof list.shareCreated !== 'boolean' && String(list.shareCode||'').replace(/[^0-9A-Z]/gi,'').toUpperCase().length===6){
           list.shareCreated = true;
         }
@@ -2343,6 +2416,7 @@
 
       function buildMetaPatch(list, includeTitle){
         const patch = {
+          'meta/createdAt': list.createdAt,
           'meta/updatedAt': list.metaUpdatedAt,
           'meta/updatedBy': list.metaUpdatedBy,
           'meta/schemaVersion': SHARED_SCHEMA_VERSION
@@ -2416,6 +2490,7 @@
         ensureListStructure(list);
         return {
           title: list.title,
+          createdAt: list.createdAt,
           updatedAt: list.metaUpdatedAt,
           updatedBy: list.metaUpdatedBy,
           metaUpdatedAt: list.metaUpdatedAt,
@@ -2604,6 +2679,10 @@
             if(!remote){ return; }
             ensureListStructure(list);
             list.shareCreated = true;
+            list.createdAt = Math.min(
+              list.createdAt,
+              normalizeTimestamp(remote.createdAt, list.createdAt)
+            );
             if(compareVersion(remote.updatedAt, remote.updatedBy, list.metaUpdatedAt, list.metaUpdatedBy) > 0){
               list.title = remote.title || list.title || 'Lista';
               list.metaUpdatedAt = normalizeTimestamp(remote.updatedAt, list.metaUpdatedAt);
@@ -3134,6 +3213,59 @@
 
       function formatListTaskCount(count){
         return `${count} ${count === 1 ? 'tarefa' : 'tarefas'}`;
+      }
+
+      function formatListProgress(completedCount, totalCount){
+        return `${completedCount}/${totalCount} concluídas`;
+      }
+
+      function getListCreatedAt(list){
+        const fallback = normalizeTimestamp(
+          list && list.metaUpdatedAt,
+          normalizeTimestamp(list && list.updatedAt, nowTs())
+        );
+        return Math.min(normalizeTimestamp(list && list.createdAt, fallback), fallback);
+      }
+
+      function getLocalDateKey(timestamp){
+        const date = new Date(timestamp);
+        return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+      }
+
+      function formatListDateDivider(timestamp){
+        const date = new Date(timestamp);
+        const now = new Date();
+        const includeYear = date.getFullYear() !== now.getFullYear();
+        try{
+          const parts = new Intl.DateTimeFormat('pt-BR', {
+            day: 'numeric',
+            month: 'short',
+            ...(includeYear ? { year: 'numeric' } : {})
+          }).formatToParts(date);
+          const getPart = (type)=> (parts.find((part)=> part.type===type) || {}).value || '';
+          const month = getPart('month').replace('.', '');
+          const monthLabel = month ? month.charAt(0).toUpperCase() + month.slice(1) : '';
+          const year = getPart('year');
+          return [getPart('day'), monthLabel, includeYear ? year : ''].filter(Boolean).join(' ');
+        }catch(_){
+          return date.toLocaleDateString('pt-BR');
+        }
+      }
+
+      function createListDateDivider(timestamp){
+        const divider = document.createElement('div');
+        divider.className = 'list-date-divider';
+        const label = document.createElement('span');
+        label.className = 'list-date-divider-label';
+        label.textContent = formatListDateDivider(timestamp);
+        divider.appendChild(label);
+        return divider;
+      }
+
+      function compareListsByCreation(a, b){
+        const timestampDiff = getListCreatedAt(b) - getListCreatedAt(a);
+        if(timestampDiff){ return timestampDiff; }
+        return String(b && b.id || '').localeCompare(String(a && a.id || ''));
       }
 
       const LIST_INITIAL_GRADIENT_COLORS = [
@@ -3846,9 +3978,20 @@
         heading.textContent = 'Minhas listas';
         listsContainer.appendChild(heading);
 
-        lists.forEach((l, index)=>{
+        const todayKey = getLocalDateKey(nowTs());
+        let currentDateKey = '';
+        lists.slice().sort(compareListsByCreation).forEach((l)=>{
+          const createdAt = getListCreatedAt(l);
+          const createdDateKey = getLocalDateKey(createdAt);
+          if(createdDateKey !== currentDateKey){
+            if(createdDateKey !== todayKey){
+              listsContainer.appendChild(createListDateDivider(createdAt));
+            }
+            currentDateKey = createdDateKey;
+          }
           const visibleTasks = getVisibleListTasks(l);
           const totalTasks = visibleTasks.length;
+          const completedTasks = visibleTasks.filter((task)=> !!task.done).length;
 
           const card = document.createElement('div');
           card.className='list-card';
@@ -3865,13 +4008,13 @@
           const bodyButton = document.createElement('button');
           bodyButton.type = 'button';
           bodyButton.className = 'list-card-body';
-          bodyButton.setAttribute('aria-label', `Abrir lista ${l.title}, ${formatListTaskCount(totalTasks)}`);
+          bodyButton.setAttribute('aria-label', `Abrir lista ${l.title}, ${formatListProgress(completedTasks, totalTasks)}`);
 
           const ico = document.createElement('div');
           ico.className='list-icon list-initial';
           ico.setAttribute('aria-hidden', 'true');
           ico.textContent = getListInitials(l.title);
-          applyListInitialGradient(ico, l, index);
+          applyListInitialGradient(ico, l, lists.indexOf(l));
 
           const content = document.createElement('div');
           content.className = 'list-card-content';
@@ -3882,7 +4025,7 @@
 
           const countEl = document.createElement('p');
           countEl.className='list-counter';
-          countEl.textContent = formatListTaskCount(totalTasks);
+          countEl.textContent = formatListProgress(completedTasks, totalTasks);
 
           content.appendChild(txt);
           content.appendChild(countEl);
@@ -3912,8 +4055,7 @@
           listsContainer.appendChild(card);
         });
         
-        // Inicializar sortable para as listas após renderização
-        initSortableLists();
+        // A exibição é cronológica; não há reordenação manual de listas.
       }
 
       function openModal(mode, listId, options){
@@ -4072,6 +4214,7 @@
           shareCode: normalized,
           imported: true,
           shareCreated: true,
+          createdAt: normalizeTimestamp(remote.createdAt, normalizeTimestamp(remote.updatedAt, nowTs())),
           metaUpdatedAt: normalizeTimestamp(remote.updatedAt, nowTs()),
           metaUpdatedBy: normalizeActor(remote.updatedBy, clientId),
           clientId

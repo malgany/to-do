@@ -26,7 +26,7 @@
       }catch(_){ }
     })();
   </script>
-  <link rel="stylesheet" href="style.css?v=1.2.8" />
+  <link rel="stylesheet" href="style.css?v=1.2.9" />
   <!-- Google tag (gtag.js) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-E132M7DYY4"></script>
   <script>
@@ -601,9 +601,11 @@
 
     function buildSharedMeta(list, fallbackUpdatedBy){
       const fallbackBy = normalizeActor(fallbackUpdatedBy, 'remote');
+      const updatedAt = Math.max(Date.now(), toFiniteNumber(list && (list.metaUpdatedAt ?? list.updatedAt), Date.now()));
       return {
         title: list && typeof list.title === 'string' ? list.title : 'Lista',
-        updatedAt: Math.max(Date.now(), toFiniteNumber(list && (list.metaUpdatedAt ?? list.updatedAt), Date.now())),
+        createdAt: Math.min(toFiniteNumber(list && list.createdAt, updatedAt), updatedAt),
+        updatedAt,
         updatedBy: normalizeActor(list && (list.metaUpdatedBy || list.updatedBy), fallbackBy),
         schemaVersion: SHARED_SCHEMA_VERSION
       };
@@ -784,9 +786,11 @@
       let needsMigration = false;
 
       if(raw.meta && typeof raw.meta === 'object'){
+        const updatedAt = toFiniteNumber(raw.meta.updatedAt, now);
         meta = {
           title: typeof raw.meta.title === 'string' ? raw.meta.title : 'Lista',
-          updatedAt: toFiniteNumber(raw.meta.updatedAt, now),
+          createdAt: Math.min(toFiniteNumber(raw.meta.createdAt, updatedAt), updatedAt),
+          updatedAt,
           updatedBy: normalizeActor(raw.meta.updatedBy, 'remote'),
           schemaVersion: SHARED_SCHEMA_VERSION
         };
@@ -800,9 +804,11 @@
         }
       } else {
         needsMigration = true;
+        const updatedAt = toFiniteNumber(raw.updatedAt, now);
         meta = {
           title: typeof raw.title === 'string' ? raw.title : 'Lista',
-          updatedAt: toFiniteNumber(raw.updatedAt, now),
+          createdAt: Math.min(toFiniteNumber(raw.createdAt, updatedAt), updatedAt),
+          updatedAt,
           updatedBy: normalizeActor(raw.updatedBy, 'legacy'),
           schemaVersion: SHARED_SCHEMA_VERSION
         };
@@ -813,6 +819,7 @@
 
       return {
         title: meta.title,
+        createdAt: meta.createdAt,
         updatedAt: meta.updatedAt,
         updatedBy: meta.updatedBy,
         schemaVersion: SHARED_SCHEMA_VERSION,
@@ -828,6 +835,7 @@
       try{
         await set(ref(firebaseDb, `${SHARED_LISTS_ROOT}/${code}`), buildSharedPayloadV2({
           title: normalized.title,
+          createdAt: normalized.createdAt,
           updatedAt: normalized.updatedAt,
           updatedBy: normalized.updatedBy,
           metaUpdatedAt: normalized.updatedAt,
@@ -867,6 +875,7 @@
       if(!normalized){ return null; }
       return {
         title: normalized.title,
+        createdAt: normalized.createdAt,
         updatedAt: normalized.updatedAt,
         updatedBy: normalized.updatedBy,
         schemaVersion: SHARED_SCHEMA_VERSION,
@@ -905,6 +914,7 @@
         }
         handler({
           title: payload.title,
+          createdAt: payload.createdAt,
           updatedAt: payload.updatedAt,
           updatedBy: payload.updatedBy,
           schemaVersion: SHARED_SCHEMA_VERSION,
@@ -947,6 +957,6 @@
   </script>
   
   <script src="vendor/sortable.min.js?v=1.15.0"></script>
-  <script src="script.js?v=1.5.2"></script>
+  <script src="script.js?v=1.5.4"></script>
 </body>
 </html>

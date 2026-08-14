@@ -250,6 +250,24 @@ header.appbar{
   font-weight:700;
   line-height:1.25;
 }
+.list-date-divider{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin:7px 10px -2px;
+  color:#98A2B3;
+  font-size:12px;
+  font-weight:700;
+  line-height:1;
+}
+.list-date-divider::before,
+.list-date-divider::after{
+  content:'';
+  flex:1;
+  height:1px;
+  background:rgba(152,162,179,0.36);
+}
+.list-date-divider-label{white-space:nowrap}
 .list-card{
   display:grid;
   grid-template-columns:minmax(0,1fr) 42px;
@@ -1280,9 +1298,7 @@ html:not(.dark) #screenQuickList.screen{
 
 /* Estilos para sortable drag and drop */
 /* arrastar em qualquer lugar do item */
-.list-card,
 .task { cursor: grab; }
-.list-card:active,
 .task:active { cursor: grabbing; }
 
 .sortable-ghost {
@@ -1893,6 +1909,9 @@ html:not(.dark) body.list-detail-screen-active .tasks-empty-state{
 }
 .dark body.lists-screen-active .lists{gap:14px}
 .dark .lists-heading{color:#F8FAFC}
+.dark .list-date-divider{color:#7E8EA6}
+.dark .list-date-divider::before,
+.dark .list-date-divider::after{background:rgba(126,142,166,0.30)}
 .dark body.lists-screen-active .list-card{
   border-color:#253247;
   background:#101722;
