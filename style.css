@@ -906,6 +906,11 @@ button.btn:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
   border-color:#2F73F6;
   background:#2F73F6;
 }
+.task-detail-row .checkbox-round.not-have.checked{
+  border-color:#F59E0B;
+  background:#FBBF24;
+  color:#422006;
+}
 .task-detail-complete-label{
   color:#667085;
   font-size:13px;
@@ -1520,15 +1525,32 @@ html:not(.dark) #screenQuickList.screen{
   inset:0;
   display:flex;
   align-items:center;
-  justify-content:flex-end;
-  padding-right:18px;
   color:#fff;
-  background:linear-gradient(90deg, rgba(220,38,38,0.15), rgba(220,38,38,0.94));
-  opacity:var(--swipe-progress, 0);
   transition:opacity var(--transition-fast);
   pointer-events:none;
 }
 .task-swipe-action svg{width:24px;height:24px}
+.task-swipe-action-delete{
+  justify-content:flex-end;
+  padding-right:18px;
+  background:linear-gradient(90deg, rgba(220,38,38,0.15), rgba(220,38,38,0.94));
+  opacity:var(--swipe-delete-progress, 0);
+}
+.task-swipe-action-status{
+  justify-content:flex-start;
+  padding-left:18px;
+  font-size:13px;
+  font-weight:800;
+  letter-spacing:.01em;
+  opacity:var(--swipe-status-progress, 0);
+}
+.task-swipe-action-status.not-have{
+  color:#422006;
+  background:linear-gradient(90deg, #FBBF24, rgba(245,158,11,0.20));
+}
+.task-swipe-action-status.complete{
+  background:linear-gradient(90deg, var(--success), rgba(16,185,129,0.18));
+}
 .task .text{flex:1;line-height:1.4}
 .drag-handle{
   width:36px;
@@ -1691,6 +1713,31 @@ html:not(.dark) body.list-detail-screen-active .list-name{
   opacity:.72;
   font-weight:800;
 }
+.task-status-divider{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin:8px 10px -1px;
+  color:#7C899D;
+  font-size:12px;
+  font-weight:800;
+  line-height:1;
+}
+.task-status-divider::before,
+.task-status-divider::after{
+  content:'';
+  flex:1;
+  height:1px;
+  background:rgba(152,162,179,0.36);
+}
+.task-status-divider-label{white-space:nowrap}
+@media (max-width:360px){
+  .task-filter-chip{
+    gap:4px;
+    padding:0 5px;
+    font-size:12px;
+  }
+}
 html:not(.dark) body.list-detail-screen-active .tasks{
   gap:12px;
   margin-top:17px;
@@ -1726,6 +1773,12 @@ html:not(.dark) body.list-detail-screen-active .checkbox-round.checked{
 html:not(.dark) body.list-detail-screen-active.task-filter-done-active .task.done .checkbox-round.checked{
   border-color:var(--success);
   background:var(--success);
+}
+html:not(.dark) body.list-detail-screen-active .task.not-have .checkbox-round.checked,
+html:not(.dark) body.list-detail-screen-active.task-filter-done-active .task.done.not-have .checkbox-round.checked{
+  border-color:#F59E0B;
+  background:#FBBF24;
+  color:#422006;
 }
 .task-content{
   flex:1;
@@ -2096,6 +2149,15 @@ html:not(.dark) body.list-detail-screen-active .tasks-empty-state{
   border-color:var(--success);
   background:var(--success);
 }
+.dark body.list-detail-screen-active .task.not-have .checkbox-round.checked,
+.dark body.list-detail-screen-active.task-filter-done-active .task.done.not-have .checkbox-round.checked{
+  border-color:#FBBF24;
+  background:#F59E0B;
+  color:#211504;
+}
+.dark .task-status-divider{color:#94A3B8}
+.dark .task-status-divider::before,
+.dark .task-status-divider::after{background:rgba(126,142,166,0.30)}
 .dark body.list-detail-screen-active .task.selected .task-body{
   border-color:#F59E0B;
   background:linear-gradient(135deg,#2A1A0A 0%,#1B2430 100%);

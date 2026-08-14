@@ -26,7 +26,7 @@
       }catch(_){ }
     })();
   </script>
-  <link rel="stylesheet" href="style.css?v=1.2.9" />
+  <link rel="stylesheet" href="style.css?v=1.3.0" />
   <!-- Google tag (gtag.js) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-E132M7DYY4"></script>
   <script>
@@ -660,20 +660,28 @@
       const createdAt = toFiniteNumber(task.createdAt, now);
       const textUpdatedAt = Math.max(createdAt, toFiniteNumber(task.textUpdatedAt, toFiniteNumber(task.updatedAt, createdAt)));
       const doneUpdatedAt = Math.max(createdAt, toFiniteNumber(task.doneUpdatedAt, toFiniteNumber(task.updatedAt, createdAt)));
+      const notHaveUpdatedAt = Math.max(createdAt, toFiniteNumber(task.notHaveUpdatedAt, createdAt));
       const textUpdatedBy = normalizeActor(task.textUpdatedBy, fallbackBy);
       const doneUpdatedBy = normalizeActor(task.doneUpdatedBy, fallbackBy);
+      const notHaveUpdatedBy = normalizeActor(task.notHaveUpdatedBy, fallbackBy);
+      const done = !!task.done;
+      const notHave = done
+        && !!task.notHave
+        && compareVersion(notHaveUpdatedAt, notHaveUpdatedBy, doneUpdatedAt, doneUpdatedBy) >= 0;
       const deletedAt = task.deletedAt == null ? null : toFiniteNumber(task.deletedAt, null);
       const deletedBy = deletedAt == null ? '' : normalizeActor(task.deletedBy, fallbackBy);
       const latest = pickLatestVersion([
         { at: textUpdatedAt, by: textUpdatedBy },
         { at: doneUpdatedAt, by: doneUpdatedBy },
+        { at: notHaveUpdatedAt, by: notHaveUpdatedBy },
         { at: deletedAt, by: deletedBy },
         ...photos.map((photo)=>({ at: photo.updatedAt, by: photo.updatedBy }))
       ], { at: Math.max(createdAt, toFiniteNumber(task.updatedAt, createdAt)), by: normalizeActor(task.updatedBy, fallbackBy) });
       return {
         id,
         text: typeof task.text === 'string' ? task.text : '',
-        done: !!task.done,
+        done,
+        notHave,
         createdAt,
         updatedAt: latest.at,
         updatedBy: latest.by,
@@ -683,6 +691,8 @@
         textUpdatedBy,
         doneUpdatedAt,
         doneUpdatedBy,
+        notHaveUpdatedAt,
+        notHaveUpdatedBy,
         photos
       };
     }
@@ -692,6 +702,7 @@
         id: task.id,
         text: task.text,
         done: !!task.done,
+        notHave: !!task.notHave,
         createdAt: task.createdAt,
         updatedAt: task.updatedAt,
         updatedBy: task.updatedBy,
@@ -701,6 +712,8 @@
         textUpdatedBy: task.textUpdatedBy,
         doneUpdatedAt: task.doneUpdatedAt,
         doneUpdatedBy: task.doneUpdatedBy,
+        notHaveUpdatedAt: task.notHaveUpdatedAt,
+        notHaveUpdatedBy: task.notHaveUpdatedBy,
         photos: {}
       };
       (task.photos || []).forEach((photo)=>{
@@ -957,6 +970,6 @@
   </script>
   
   <script src="vendor/sortable.min.js?v=1.15.0"></script>
-  <script src="script.js?v=1.5.4"></script>
+  <script src="script.js?v=1.6.0"></script>
 </body>
 </html>

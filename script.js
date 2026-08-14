@@ -2126,6 +2126,7 @@
         const latest = pickLatestVersion([
           { at: task.textUpdatedAt, by: task.textUpdatedBy },
           { at: task.doneUpdatedAt, by: task.doneUpdatedBy },
+          { at: task.notHaveUpdatedAt, by: task.notHaveUpdatedBy },
           { at: task.deletedAt, by: task.deletedBy },
           ...(Array.isArray(task.photos) ? task.photos.map((photo)=> photo ? ({ at: photo.updatedAt, by: photo.updatedBy }) : null) : [])
         ], { at: task.updatedAt || task.createdAt || nowTs(), by: task.updatedBy || task.textUpdatedBy || clientId });
@@ -2144,6 +2145,11 @@
         task.textUpdatedBy = normalizeActor(task.textUpdatedBy, actor);
         task.doneUpdatedAt = Math.max(task.createdAt, normalizeTimestamp(task.doneUpdatedAt, normalizeTimestamp(task.updatedAt, task.createdAt)));
         task.doneUpdatedBy = normalizeActor(task.doneUpdatedBy, actor);
+        task.notHaveUpdatedAt = Math.max(task.createdAt, normalizeTimestamp(task.notHaveUpdatedAt, task.createdAt));
+        task.notHaveUpdatedBy = normalizeActor(task.notHaveUpdatedBy, actor);
+        task.notHave = !!task.done
+          && !!task.notHave
+          && compareVersion(task.notHaveUpdatedAt, task.notHaveUpdatedBy, task.doneUpdatedAt, task.doneUpdatedBy) >= 0;
         task.deletedAt = task.deletedAt == null ? null : normalizeTimestamp(task.deletedAt, null);
         task.deletedBy = task.deletedAt == null ? '' : normalizeActor(task.deletedBy, actor);
         const normalizedPhotos = [];
@@ -2199,9 +2205,27 @@
 
       function setTaskDoneCommit(task, done, timestamp, actor){
         if(!task){ return; }
+        const ts = normalizeTimestamp(timestamp, nowTs());
+        const by = normalizeActor(actor, clientId);
         task.done = !!done;
-        task.doneUpdatedAt = normalizeTimestamp(timestamp, nowTs());
-        task.doneUpdatedBy = normalizeActor(actor, clientId);
+        task.notHave = false;
+        task.doneUpdatedAt = ts;
+        task.doneUpdatedBy = by;
+        task.notHaveUpdatedAt = ts;
+        task.notHaveUpdatedBy = by;
+        refreshTaskAggregateMetadata(task);
+      }
+
+      function setTaskNotHaveCommit(task, notHave, timestamp, actor){
+        if(!task){ return; }
+        const ts = normalizeTimestamp(timestamp, nowTs());
+        const by = normalizeActor(actor, clientId);
+        task.done = true;
+        task.notHave = !!notHave;
+        task.doneUpdatedAt = ts;
+        task.doneUpdatedBy = by;
+        task.notHaveUpdatedAt = ts;
+        task.notHaveUpdatedBy = by;
         refreshTaskAggregateMetadata(task);
       }
 
@@ -2302,6 +2326,7 @@
         if(!right){ return left; }
         const useRemoteText = compareVersion(right.textUpdatedAt, right.textUpdatedBy, left.textUpdatedAt, left.textUpdatedBy) > 0;
         const useRemoteDone = compareVersion(right.doneUpdatedAt, right.doneUpdatedBy, left.doneUpdatedAt, left.doneUpdatedBy) > 0;
+        const useRemoteNotHave = compareVersion(right.notHaveUpdatedAt, right.notHaveUpdatedBy, left.notHaveUpdatedAt, left.notHaveUpdatedBy) > 0;
         const merged = {
           id: left.id || right.id,
           text: useRemoteText ? right.text : left.text,
@@ -2311,6 +2336,9 @@
           textUpdatedBy: useRemoteText ? right.textUpdatedBy : left.textUpdatedBy,
           doneUpdatedAt: useRemoteDone ? right.doneUpdatedAt : left.doneUpdatedAt,
           doneUpdatedBy: useRemoteDone ? right.doneUpdatedBy : left.doneUpdatedBy,
+          notHave: useRemoteNotHave ? right.notHave : left.notHave,
+          notHaveUpdatedAt: useRemoteNotHave ? right.notHaveUpdatedAt : left.notHaveUpdatedAt,
+          notHaveUpdatedBy: useRemoteNotHave ? right.notHaveUpdatedBy : left.notHaveUpdatedBy,
           deletedAt: null,
           deletedBy: '',
           photos: []
@@ -2402,6 +2430,7 @@
           [`${base}/id`]: task.id,
           [`${base}/text`]: task.text,
           [`${base}/done`]: !!task.done,
+          [`${base}/notHave`]: !!task.notHave,
           [`${base}/createdAt`]: task.createdAt,
           [`${base}/updatedAt`]: task.updatedAt,
           [`${base}/updatedBy`]: task.updatedBy,
@@ -2411,6 +2440,8 @@
           [`${base}/textUpdatedBy`]: task.textUpdatedBy,
           [`${base}/doneUpdatedAt`]: task.doneUpdatedAt,
           [`${base}/doneUpdatedBy`]: task.doneUpdatedBy,
+          [`${base}/notHaveUpdatedAt`]: task.notHaveUpdatedAt,
+          [`${base}/notHaveUpdatedBy`]: task.notHaveUpdatedBy,
         };
       }
 
@@ -2441,14 +2472,17 @@
             [`tasks/${task.id}/updatedBy`]: task.updatedBy
           };
         }
-        if(kind === 'done'){
+        if(kind === 'done' || kind === 'status'){
           return {
             'meta/updatedAt': list.metaUpdatedAt,
             'meta/updatedBy': list.metaUpdatedBy,
             'meta/schemaVersion': SHARED_SCHEMA_VERSION,
             [`tasks/${task.id}/done`]: !!task.done,
+            [`tasks/${task.id}/notHave`]: !!task.notHave,
             [`tasks/${task.id}/doneUpdatedAt`]: task.doneUpdatedAt,
             [`tasks/${task.id}/doneUpdatedBy`]: task.doneUpdatedBy,
+            [`tasks/${task.id}/notHaveUpdatedAt`]: task.notHaveUpdatedAt,
+            [`tasks/${task.id}/notHaveUpdatedBy`]: task.notHaveUpdatedBy,
             [`tasks/${task.id}/updatedAt`]: task.updatedAt,
             [`tasks/${task.id}/updatedBy`]: task.updatedBy
           };
@@ -2574,6 +2608,10 @@
         if(target.kind === 'task_done'){
           if(remoteTask.deletedAt != null && compareVersion(remoteTask.deletedAt, remoteTask.deletedBy, target.at, target.by) >= 0){ return true; }
           return compareVersion(remoteTask.doneUpdatedAt, remoteTask.doneUpdatedBy, target.at, target.by) >= 0;
+        }
+        if(target.kind === 'task_status'){
+          if(remoteTask.deletedAt != null && compareVersion(remoteTask.deletedAt, remoteTask.deletedBy, target.at, target.by) >= 0){ return true; }
+          return compareVersion(remoteTask.notHaveUpdatedAt, remoteTask.notHaveUpdatedBy, target.at, target.by) >= 0;
         }
         if(target.kind === 'task_delete'){
           return remoteTask.deletedAt != null && compareVersion(remoteTask.deletedAt, remoteTask.deletedBy, target.at, target.by) >= 0;
@@ -3216,7 +3254,7 @@
       }
 
       function formatListProgress(completedCount, totalCount){
-        return `${completedCount}/${totalCount} concluídas`;
+        return `${completedCount}/${totalCount} finalizados`;
       }
 
       function getListCreatedAt(list){
@@ -3372,7 +3410,7 @@
       const TASK_FILTERS = [
         { id: 'all', label: 'Todas' },
         { id: 'active', label: 'A fazer' },
-        { id: 'done', label: 'Concluídas' }
+        { id: 'done', label: 'Finalizados' }
       ];
       const TASK_FILTER_IDS = new Set(TASK_FILTERS.map((filter)=> filter.id));
 
@@ -3522,6 +3560,18 @@
           });
           taskFilterChips.appendChild(button);
         });
+      }
+
+      function createTaskStatusDivider(label, status){
+        const divider = document.createElement('div');
+        divider.className = `task-status-divider task-status-divider-${status}`;
+        divider.setAttribute('role', 'heading');
+        divider.setAttribute('aria-level', '2');
+        const text = document.createElement('span');
+        text.className = 'task-status-divider-label';
+        text.textContent = label;
+        divider.appendChild(text);
+        return divider;
       }
 
       function getQuickTemplateById(templateId){
@@ -4349,6 +4399,7 @@
         lastValidTaskText = task.text || '';
         renderTaskPriorityControls();
         // checkbox state
+        taskDetailCheckbox.classList.toggle('not-have', !!task.notHave);
         if(task.done){ taskDetailCheckbox.classList.add('checked'); taskDetailCheckbox.innerHTML='✓'; }
         else { taskDetailCheckbox.classList.remove('checked'); taskDetailCheckbox.innerHTML=''; }
         setCheckedMark(taskDetailCheckbox, !!task.done);
@@ -4367,24 +4418,32 @@
       }
 
       function buildTaskElement(task, isDone, priorityMeta, duplicateCounts){
+        const isNotHave = isDone && !!task.notHave;
         const node = document.createElement('div');
-        node.className = isDone ? 'task done' : 'task';
+        node.className = isDone ? `task done${isNotHave ? ' not-have' : ''}` : 'task';
         node.dataset.id = task.id;
         node.dataset.done = isDone ? 'true' : 'false';
+        node.dataset.finishStatus = isNotHave ? 'not-have' : (isDone ? 'completed' : 'active');
         if(isSelectionMode && selectedTaskIds.has(task.id)){
           node.classList.add('selected');
         }
 
-        const swipeAction = document.createElement('div');
-        swipeAction.className = 'task-swipe-action';
-        swipeAction.appendChild(createTrashIconSvg());
+        const deleteSwipeAction = document.createElement('div');
+        deleteSwipeAction.className = 'task-swipe-action task-swipe-action-delete';
+        deleteSwipeAction.appendChild(createTrashIconSvg());
+
+        const statusSwipeAction = document.createElement('div');
+        statusSwipeAction.className = `task-swipe-action task-swipe-action-status ${isNotHave ? 'complete' : 'not-have'}`;
+        const statusSwipeLabel = document.createElement('span');
+        statusSwipeLabel.textContent = isNotHave ? 'Concluído' : 'Não Tem';
+        statusSwipeAction.appendChild(statusSwipeLabel);
 
         const body = document.createElement('div');
         body.className = 'task-body';
 
         const cb = document.createElement('button');
         if(isDone){
-          cb.className = 'checkbox-round checked';
+          cb.className = `checkbox-round checked${isNotHave ? ' not-have' : ''}`;
           cb.setAttribute('aria-pressed', 'true');
           cb.title = 'Desmarcar';
           cb.innerHTML = '&#10003;';
@@ -4505,10 +4564,11 @@
             if(event.target.closest('.checkbox-round') || event.target.closest('.drag-handle')){ return; }
             openTaskDetail(task.id);
           });
-          attachSwipeToDeleteV2(node, body, task.id);
+          attachSwipeToDeleteV2(node, body, task.id, isNotHave);
         }
 
-        node.appendChild(swipeAction);
+        node.appendChild(deleteSwipeAction);
+        node.appendChild(statusSwipeAction);
         node.appendChild(body);
         return node;
       }
@@ -4623,7 +4683,9 @@
         }
         const visibleTasks = getVisibleTasks(list);
         const active = visibleTasks.filter(t=>!t.done);
-        const done = visibleTasks.filter(t=>t.done);
+        const completed = visibleTasks.filter(t=>t.done && !t.notHave);
+        const notHave = visibleTasks.filter(t=>t.done && t.notHave);
+        const done = [...completed, ...notHave];
         const counts = {
           all: visibleTasks.length,
           active: active.length,
@@ -4672,8 +4734,16 @@
             }
           } else {
             if(done.length){
-              renderTasksWithGroups(done, tasksContainer, groups, true, priorityByTask, duplicateCounts);
-              renderedCount += done.length;
+              tasksContainer.appendChild(createTaskStatusDivider('Concluídos', 'completed'));
+              if(completed.length){
+                renderTasksWithGroups(completed, tasksContainer, groups, true, priorityByTask, duplicateCounts);
+                renderedCount += completed.length;
+              }
+              tasksContainer.appendChild(createTaskStatusDivider('Não Tem', 'not-have'));
+              if(notHave.length){
+                renderTasksWithGroups(notHave, tasksContainer, groups, true, priorityByTask, duplicateCounts);
+                renderedCount += notHave.length;
+              }
             }
           }
 
@@ -4834,20 +4904,21 @@
         const ts = nowTs();
         touchListMeta(list, ts, clientId);
         
-        // Obter listas separadas de tarefas ativas e concluídas (excluindo a tarefa atual)
+        // Obter listas separadas por estado (excluindo a tarefa atual)
         const visibleTasks = getVisibleTasks(list);
         const activeTasks = visibleTasks.filter(t => !t.done && t.id !== taskId);
-        const doneTasks = visibleTasks.filter(t => t.done && t.id !== taskId);
+        const completedTasks = visibleTasks.filter(t => t.done && !t.notHave && t.id !== taskId);
+        const notHaveTasks = visibleTasks.filter(t => t.done && t.notHave && t.id !== taskId);
         const deletedTasks = (list.tasks || []).filter((entry)=> isTaskDeleted(entry));
         setTaskDoneCommit(task, !!markDone, ts, clientId);
         
         // Reorganizar as tarefas mantendo a ordem personalizada
         if(task.done) {
-          // Se foi marcada como concluída, adicionar ao início das concluídas
-          list.tasks = [...activeTasks, task, ...doneTasks, ...deletedTasks];
+          // Se foi marcada como concluída, adicionar ao início das concluídas.
+          list.tasks = [...activeTasks, task, ...completedTasks, ...notHaveTasks, ...deletedTasks];
         } else {
           // Se foi marcada como ativa, adicionar ao início das ativas
-          list.tasks = [task, ...activeTasks, ...doneTasks, ...deletedTasks];
+          list.tasks = [task, ...activeTasks, ...completedTasks, ...notHaveTasks, ...deletedTasks];
         }
         enqueueSyncOperation(list, buildTaskFieldPatch(list, task, 'done'), [
           { kind:'task_done', taskId: task.id, at: task.doneUpdatedAt, by: task.doneUpdatedBy }
@@ -4862,11 +4933,39 @@
         
         // if we're in task detail for this task, update detail checkbox and text style
         if(currentTaskId===taskId && screenTaskDetail.classList.contains('active')){
+          taskDetailCheckbox.classList.remove('not-have');
           if(task.done){ taskDetailCheckbox.classList.add('checked'); taskDetailCheckbox.innerHTML='✓'; }
           else{ taskDetailCheckbox.classList.remove('checked'); taskDetailCheckbox.innerHTML=''; }
           setCheckedMark(taskDetailCheckbox, !!task.done);
           // keep user on task detail
         }
+      }
+
+      function toggleTaskNotHave(taskId, markNotHave){
+        const list = lists.find((entry)=> entry && entry.id===currentListId); if(!list) return;
+        const task = findTaskById(list, taskId, false); if(!task) return;
+        const ts = nowTs();
+        touchListMeta(list, ts, clientId);
+
+        const visibleTasks = getVisibleTasks(list);
+        const activeTasks = visibleTasks.filter((entry)=> !entry.done && entry.id !== taskId);
+        const completedTasks = visibleTasks.filter((entry)=> entry.done && !entry.notHave && entry.id !== taskId);
+        const notHaveTasks = visibleTasks.filter((entry)=> entry.done && entry.notHave && entry.id !== taskId);
+        const deletedTasks = (list.tasks || []).filter((entry)=> isTaskDeleted(entry));
+        setTaskNotHaveCommit(task, !!markNotHave, ts, clientId);
+
+        list.tasks = task.notHave
+          ? [...activeTasks, ...completedTasks, task, ...notHaveTasks, ...deletedTasks]
+          : [...activeTasks, task, ...completedTasks, ...notHaveTasks, ...deletedTasks];
+        enqueueSyncOperation(list, buildTaskFieldPatch(list, task, 'status'), [
+          { kind:'task_status', taskId: task.id, at: task.notHaveUpdatedAt, by: task.notHaveUpdatedBy }
+        ]);
+        updateLocalOrderForList(list.id);
+        saveState();
+        renderTasks();
+        renderLists();
+        requestSync(list.id);
+        showToast(task.notHave ? 'Item movido para Não Tem.' : 'Item movido para Concluídos.', { type:'success' });
       }
 
       function queueDeleteUndo(list, task, undoInfo){
@@ -5036,7 +5135,7 @@
         node.addEventListener('click', (ev)=>{ if(moved){ ev.stopPropagation(); ev.preventDefault(); } });
       }
 
-      function attachSwipeToDeleteV2(node, swipeSurface, taskId){
+      function attachSwipeToDeleteV2(node, swipeSurface, taskId, isNotHave){
         const threshold = 0.4;
         let startX = 0;
         let startY = 0;
@@ -5049,7 +5148,8 @@
         function setTranslate(x){
           swipeSurface.style.transform = `translateX(${x}px)`;
           const ratio = Math.max(0, Math.min(1, Math.abs(x) / Math.max(width || 1, 1)));
-          node.style.setProperty('--swipe-progress', ratio.toFixed(3));
+          node.style.setProperty('--swipe-delete-progress', x < 0 ? ratio.toFixed(3) : '0');
+          node.style.setProperty('--swipe-status-progress', x > 0 ? ratio.toFixed(3) : '0');
         }
 
         function resetSwipe(){
@@ -5057,7 +5157,8 @@
           setTranslate(0);
           setTimeout(()=>{
             swipeSurface.classList.remove('swipe-anim');
-            node.style.removeProperty('--swipe-progress');
+            node.style.removeProperty('--swipe-delete-progress');
+            node.style.removeProperty('--swipe-status-progress');
           }, 180);
         }
 
@@ -5073,6 +5174,8 @@
           startY = event.clientY || 0;
           currentX = startX;
           swipeSurface.classList.remove('swipe-anim');
+          window.addEventListener('pointerup', onPointerUp, { once:true });
+          window.addEventListener('pointercancel', onPointerCancel, { once:true });
         }
 
         function onPointerMove(event){
@@ -5084,7 +5187,7 @@
           currentX = x;
           if(!swiping){
             if(Math.abs(dx) < 8 && Math.abs(dy) < 8){ return; }
-            if(Math.abs(dx) <= Math.abs(dy) || dx >= 0){
+            if(Math.abs(dx) <= Math.abs(dy)){
               tracking = false;
               return;
             }
@@ -5093,35 +5196,45 @@
           }
           suppressClick = true;
           if(event.cancelable){ event.preventDefault(); }
-          setTranslate(Math.max(dx, -width * 0.7));
+          setTranslate(Math.max(-width * 0.7, Math.min(dx, width * 0.7)));
         }
 
         function onPointerUp(event){
           if(!tracking && !swiping){ return; }
           const endX = event.clientX || currentX;
-          const dx = Math.min(0, endX - startX);
+          const dx = endX - startX;
           const ratio = Math.abs(dx) / Math.max(width || 1, 1);
           tracking = false;
           if(swiping && ratio >= threshold){
             swipeSurface.classList.add('swipe-anim');
-            setTranslate(-Math.max(width * 0.7, 120));
-            setTimeout(()=>{ deleteTask(taskId, { allowUndo:true }); }, 150);
+            const direction = dx < 0 ? -1 : 1;
+            setTranslate(direction * Math.max(width * 0.7, 120));
+            setTimeout(()=>{
+              if(direction < 0){ deleteTask(taskId, { allowUndo:true }); }
+              else { toggleTaskNotHave(taskId, !isNotHave); }
+            }, 150);
           } else {
             resetSwipe();
           }
           swiping = false;
         }
 
+        function onPointerCancel(){
+          tracking = false;
+          swiping = false;
+          resetSwipe();
+        }
+
         swipeSurface.addEventListener('pointerdown', onPointerDown, { passive: true });
         swipeSurface.addEventListener('pointermove', onPointerMove);
         swipeSurface.addEventListener('pointerup', onPointerUp);
-        swipeSurface.addEventListener('pointercancel', onPointerUp);
+        swipeSurface.addEventListener('pointercancel', onPointerCancel);
         swipeSurface.addEventListener('click', (event)=>{
           if(suppressClick){
             event.preventDefault();
             event.stopPropagation();
           }
-        });
+        }, true);
       }
 
       // Composer controls (overlay)
