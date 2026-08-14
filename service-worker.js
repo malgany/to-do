@@ -1,9 +1,9 @@
-const CACHE_NAME = 'todo-pwa-v40';
+const CACHE_NAME = 'todo-pwa-v42';
 const ASSETS = [
   './',
   './index.html',
-  './style.css?v=1.2.7',
-  './script.js?v=1.5.0',
+  './style.css?v=1.2.8',
+  './script.js?v=1.5.2',
   './vendor/sortable.min.js',
   './manifest.json?v=1.0.1',
   './assets/quick-lists/quick-market.jpg',

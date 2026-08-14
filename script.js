@@ -3769,6 +3769,53 @@
         return svg;
       }
 
+      function createPhotoIndicatorSvg(){
+        const svg = document.createElementNS(SVG_NS, 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('aria-hidden', 'true');
+        svg.setAttribute('focusable', 'false');
+        const path = document.createElementNS(SVG_NS, 'path');
+        path.setAttribute('d', 'M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2Zm0 16H5V5h14v14ZM8.5 14.5l2.5 3.01L14.5 13l4.5 6H5l3.5-4.5ZM8.5 11A2.5 2.5 0 1 0 8.5 6a2.5 2.5 0 0 0 0 5Z');
+        path.setAttribute('fill', 'currentColor');
+        svg.appendChild(path);
+        return svg;
+      }
+
+      function createDuplicateIndicatorSvg(){
+        const svg = document.createElementNS(SVG_NS, 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('aria-hidden', 'true');
+        svg.setAttribute('focusable', 'false');
+        const path = document.createElementNS(SVG_NS, 'path');
+        path.setAttribute('d', 'M7 7V5c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2v10c0 1.1-.9 2-2 2h-2v-2h2V5H9v2H7Zm8 2H5v10h10V9Zm0-2c1.1 0 2 .9 2 2v10c0 1.1-.9 2-2 2H5c-1.1 0-2-.9-2-2V9c0-1.1.9-2 2-2h10Z');
+        path.setAttribute('fill', 'currentColor');
+        svg.appendChild(path);
+        return svg;
+      }
+
+      function normalizeDuplicateTaskText(text){
+        return String(text || '')
+          .normalize('NFKC')
+          .trim()
+          .replace(/\s+/g, ' ')
+          .toLocaleLowerCase('pt-BR');
+      }
+
+      function getDuplicateTaskCounts(tasks){
+        const counts = new Map();
+        (tasks || []).forEach((task)=>{
+          const key = normalizeDuplicateTaskText(task && task.text);
+          if(!key){ return; }
+          counts.set(key, (counts.get(key) || 0) + 1);
+        });
+        return counts;
+      }
+
+      function getTaskDuplicateCount(task, duplicateCounts){
+        if(!duplicateCounts){ return 0; }
+        return duplicateCounts.get(normalizeDuplicateTaskText(task && task.text)) || 0;
+      }
+
       function formatSubtitleDate(){
         try{
           const now = new Date();
@@ -4176,7 +4223,7 @@
         const range = document.createRange(); const sel = window.getSelection(); range.selectNodeContents(el); range.collapse(false); sel.removeAllRanges(); sel.addRange(range);
       }
 
-      function buildTaskElement(task, isDone, priorityMeta){
+      function buildTaskElement(task, isDone, priorityMeta, duplicateCounts){
         const node = document.createElement('div');
         node.className = isDone ? 'task done' : 'task';
         node.dataset.id = task.id;
@@ -4250,10 +4297,40 @@
           openTaskDetail(task.id);
         });
 
+        const titleRow = document.createElement('div');
+        titleRow.className = 'task-title-row';
+
         const txt = document.createElement('div');
         txt.className = 'text';
         txt.textContent = task.text;
-        content.appendChild(txt);
+        titleRow.appendChild(txt);
+
+        const visiblePhotoCount = getVisiblePhotos(task).length;
+        const duplicateCount = getTaskDuplicateCount(task, duplicateCounts);
+        if(visiblePhotoCount || duplicateCount > 1){
+          const indicators = document.createElement('span');
+          indicators.className = 'task-indicators';
+          if(visiblePhotoCount){
+            const photoIndicator = document.createElement('span');
+            photoIndicator.className = 'task-indicator task-indicator-photo';
+            photoIndicator.title = visiblePhotoCount === 1 ? 'Esta tarefa tem 1 foto anexada' : `Esta tarefa tem ${visiblePhotoCount} fotos anexadas`;
+            photoIndicator.setAttribute('role', 'img');
+            photoIndicator.setAttribute('aria-label', photoIndicator.title);
+            photoIndicator.appendChild(createPhotoIndicatorSvg());
+            indicators.appendChild(photoIndicator);
+          }
+          if(duplicateCount > 1){
+            const duplicateIndicator = document.createElement('span');
+            duplicateIndicator.className = 'task-indicator task-indicator-duplicate';
+            duplicateIndicator.title = `Há ${duplicateCount} itens com este mesmo nome nesta lista`;
+            duplicateIndicator.setAttribute('role', 'img');
+            duplicateIndicator.setAttribute('aria-label', duplicateIndicator.title);
+            duplicateIndicator.appendChild(createDuplicateIndicatorSvg());
+            indicators.appendChild(duplicateIndicator);
+          }
+          titleRow.appendChild(indicators);
+        }
+        content.appendChild(titleRow);
 
         if(priorityMeta){
           const priority = document.createElement('span');
@@ -4299,7 +4376,7 @@
       }
 
       // Renderizar tarefas com suporte a agrupamento visual
-      function renderTasksWithGroups(tasks, container, groups, isDone, priorityByTask) {
+      function renderTasksWithGroups(tasks, container, groups, isDone, priorityByTask, duplicateCounts) {
         // Criar mapa de taskId -> groupId
         const taskToGroup = {};
         for (const [groupId, group] of Object.entries(groups)) {
@@ -4378,7 +4455,7 @@
 
             // Adicionar tarefas do grupo na ordem original
             groupTasks.forEach(groupTask => {
-              const taskEl = buildTaskElement(groupTask, isDone, priorityByTask && priorityByTask.get(groupTask.id));
+              const taskEl = buildTaskElement(groupTask, isDone, priorityByTask && priorityByTask.get(groupTask.id), duplicateCounts);
               groupContainer.appendChild(taskEl);
               processedTasks.add(groupTask.id);
             });
@@ -4387,7 +4464,7 @@
             delete groupedTasks[groupId]; // Evitar renderizar o mesmo grupo duas vezes
           } else if (!groupId) {
             // Renderizar tarefa sem grupo
-            const taskEl = buildTaskElement(task, isDone, priorityByTask && priorityByTask.get(task.id));
+            const taskEl = buildTaskElement(task, isDone, priorityByTask && priorityByTask.get(task.id), duplicateCounts);
             container.appendChild(taskEl);
             processedTasks.add(task.id);
           }
@@ -4421,6 +4498,7 @@
         // Carregar grupos locais da lista
         const groups = loadLocalGroups(currentListId);
         const priorityByTask = new Map();
+        const duplicateCounts = getDuplicateTaskCounts(visibleTasks);
         visibleTasks.forEach((task)=>{
           const priorityMeta = getTaskPriorityMeta(getTaskPriorityValue(currentListId, task.id));
           if(priorityMeta){ priorityByTask.set(task.id, priorityMeta); }
@@ -4437,21 +4515,21 @@
           let renderedCount = 0;
           if(currentTaskFilter === 'all'){
             if(active.length){
-              renderTasksWithGroups(active, tasksContainer, groups, false, priorityByTask);
+              renderTasksWithGroups(active, tasksContainer, groups, false, priorityByTask, duplicateCounts);
               renderedCount += active.length;
             }
             if(done.length){
-              renderTasksWithGroups(done, tasksContainer, groups, true, priorityByTask);
+              renderTasksWithGroups(done, tasksContainer, groups, true, priorityByTask, duplicateCounts);
               renderedCount += done.length;
             }
           } else if(currentTaskFilter === 'active'){
             if(active.length){
-              renderTasksWithGroups(active, tasksContainer, groups, false, priorityByTask);
+              renderTasksWithGroups(active, tasksContainer, groups, false, priorityByTask, duplicateCounts);
               renderedCount += active.length;
             }
           } else {
             if(done.length){
-              renderTasksWithGroups(done, tasksContainer, groups, true, priorityByTask);
+              renderTasksWithGroups(done, tasksContainer, groups, true, priorityByTask, duplicateCounts);
               renderedCount += done.length;
             }
           }
