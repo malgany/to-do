@@ -744,6 +744,7 @@ button.btn:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 
 /* tasks */
 .tasks{display:flex;flex-direction:column;gap:var(--space-3);margin-top:var(--space-4)}
+#tasksContainer{overflow-anchor:none}
 .task{
   padding:var(--space-3);
   border-radius:var(--radius-sm);
@@ -1502,6 +1503,35 @@ html:not(.dark) #screenQuickList.screen{
   touch-action:pan-y;
 }
 .task:hover .task-body{background:var(--card-hover)}
+.task.completing{z-index:2}
+.task.completing .task-body{
+  border-color:rgba(16,185,129,0.62) !important;
+  background:linear-gradient(135deg,rgba(236,253,245,0.98),rgba(209,250,229,0.92)) !important;
+  box-shadow:0 10px 26px rgba(16,185,129,0.18) !important;
+  transition:transform .2s ease, opacity .2s ease, background .2s ease, border-color .2s ease, box-shadow .2s ease;
+}
+.task.completing .checkbox-round.checked{
+  border-color:var(--success) !important;
+  background:var(--success) !important;
+  color:#fff !important;
+}
+.task.completing .text{color:var(--success-700) !important}
+.task.completing-exit .task-body{
+  opacity:.12;
+  transform:scale(.985);
+}
+.task.task-reflowing{
+  transition:transform .28s cubic-bezier(.22,.8,.26,1);
+}
+.checkbox-round.completion-confirm{
+  animation:completion-confirm .52s cubic-bezier(.2,.9,.3,1);
+}
+@keyframes completion-confirm{
+  0%{transform:scale(1)}
+  35%{transform:scale(.78)}
+  68%{transform:scale(1.16)}
+  100%{transform:scale(1)}
+}
 .task.selected .task-body{
   border-color:#F59E0B;
   background:linear-gradient(135deg,#FFF7ED 0%,#FFFBEB 100%);
@@ -2118,6 +2148,12 @@ html:not(.dark) body.list-detail-screen-active .tasks-empty-state{
   background:#141D2A;
   box-shadow:0 14px 30px rgba(0,0,0,0.30);
 }
+.dark body.list-detail-screen-active .task.completing .task-body{
+  border-color:rgba(52,211,153,0.62) !important;
+  background:linear-gradient(135deg,rgba(6,78,59,0.72),rgba(16,36,42,0.96)) !important;
+  box-shadow:0 12px 28px rgba(16,185,129,0.18) !important;
+}
+.dark body.list-detail-screen-active .task.completing .text{color:#6EE7B7 !important}
 .dark body.list-detail-screen-active .task .text{
   width:100%;
   color:#F8FAFC;

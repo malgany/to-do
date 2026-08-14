@@ -343,6 +343,7 @@
         gallery: createHiddenPhotoInput({})
       };
       const pendingDeleteUndos = new Map();
+      const pendingTaskCompletionIds = new Set();
       const QUICK_LIST_TEMPLATES = [
         {
           id: 'mercado',
@@ -4892,13 +4893,74 @@
         exitSelectionMode();
       }
 
-      // animation helper: add pop class then toggle state
+      function captureRenderedTaskPositions(){
+        const positions = new Map();
+        if(!tasksContainer){ return positions; }
+        tasksContainer.querySelectorAll('.task[data-id]').forEach((node)=>{
+          const rect = node.getBoundingClientRect();
+          if(rect.height > 0){ positions.set(node.dataset.id, rect.top); }
+        });
+        return positions;
+      }
+
+      function animateRenderedTaskReflow(previousPositions){
+        if(!previousPositions || !previousPositions.size || !tasksContainer){ return; }
+        const movingNodes = [];
+        tasksContainer.querySelectorAll('.task[data-id]').forEach((node)=>{
+          const previousTop = previousPositions.get(node.dataset.id);
+          if(previousTop == null){ return; }
+          const currentTop = node.getBoundingClientRect().top;
+          const deltaY = previousTop - currentTop;
+          if(Math.abs(deltaY) < 1){ return; }
+          movingNodes.push({ node, deltaY });
+        });
+        if(!movingNodes.length){ return; }
+        requestAnimationFrame(()=>{
+          movingNodes.forEach(({ node, deltaY })=>{
+            node.style.transition = 'none';
+            node.style.transform = `translateY(${deltaY}px)`;
+          });
+          tasksContainer.getBoundingClientRect();
+          requestAnimationFrame(()=>{
+            movingNodes.forEach(({ node })=>{
+              node.classList.add('task-reflowing');
+              node.style.removeProperty('transition');
+              node.style.removeProperty('transform');
+              setTimeout(()=> node.classList.remove('task-reflowing'), 320);
+            });
+          });
+        });
+      }
+
+      // Confirma visualmente a conclusão antes de mudar a tarefa de seção.
       function animateAndToggle(buttonEl, taskId, markDone){
+        const reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+        if(markDone && !reduceMotion){
+          if(pendingTaskCompletionIds.has(taskId)){ return; }
+          pendingTaskCompletionIds.add(taskId);
+          const taskNode = buttonEl.closest('.task');
+          buttonEl.disabled = true;
+          buttonEl.setAttribute('aria-pressed', 'true');
+          buttonEl.setAttribute('aria-busy', 'true');
+          buttonEl.classList.add('checked', 'completion-confirm');
+          setCheckedMark(buttonEl, true);
+          if(taskNode){ taskNode.classList.add('completing'); }
+          setTimeout(()=>{
+            if(taskNode && taskNode.isConnected){ taskNode.classList.add('completing-exit'); }
+          }, 500);
+          setTimeout(()=>{
+            const previousPositions = captureRenderedTaskPositions();
+            pendingTaskCompletionIds.delete(taskId);
+            toggleTaskDone(taskId, true, { animateReflow:true, previousPositions });
+          }, 680);
+          return;
+        }
         buttonEl.classList.add('pop');
         setTimeout(()=>{ buttonEl.classList.remove('pop'); toggleTaskDone(taskId, markDone); }, 180);
       }
 
-      function toggleTaskDone(taskId, markDone){
+      function toggleTaskDone(taskId, markDone, options){
+        const opts = Object.assign({ animateReflow:false, previousPositions:null }, options||{});
         const list = lists.find(x=>x.id===currentListId); if(!list) return;
         const task = findTaskById(list, taskId, false); if(!task) return;
         const ts = nowTs();
@@ -4926,6 +4988,7 @@
         updateLocalOrderForList(list.id);
         saveState();
         renderTasks();
+        if(opts.animateReflow){ animateRenderedTaskReflow(opts.previousPositions); }
         // Garantir que o Sortable seja reativado após mudança de status
         try{ initSortableTasksV2(); }catch(_){ }
         renderLists();
