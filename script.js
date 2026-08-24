@@ -2185,9 +2185,7 @@
           normalizeTimestamp(list.createdAt, list.metaUpdatedAt),
           list.metaUpdatedAt
         );
-        if(typeof list.shareCreated !== 'boolean' && String(list.shareCode||'').replace(/[^0-9A-Z]/gi,'').toUpperCase().length===6){
-          list.shareCreated = true;
-        }
+        if(typeof list.shareCreated !== 'boolean'){ list.shareCreated = false; }
         list.tasks.forEach((task)=> ensureTaskStructure(task, list.clientId));
       }
 
@@ -3078,33 +3076,73 @@
         }
       }
 
+      async function verifyOrRestoreSharedList(list, code){
+        const shareCode = normalizeCodeValue(code || (list && list.shareCode) || activeShareCode);
+        setShareCopyEnabled(false);
+        if(!list || shareCode.length !== 6 || typeof window === 'undefined' || typeof window.firebaseGetList !== 'function'){
+          setShareDialogStatus('Não foi possível verificar a lista. Tente novamente.', true);
+          if(shareRetryBtn){ shareRetryBtn.hidden = false; }
+          return false;
+        }
+        try{
+          setShareDialogStatus('Verificando lista compartilhada...', false);
+          if(shareRetryBtn){ shareRetryBtn.hidden = true; }
+          const remote = await waitForShareOperation(window.firebaseGetList(shareCode));
+          if(!remote){
+            list.shareCreated = false;
+            saveState();
+            return runInitialShareSync(list, { showSuccess:true, code:shareCode });
+          }
+          list.shareCreated = true;
+          saveState();
+          if(activeShareCode === shareCode){
+            setShareDialogStatus('', false);
+            setShareCopyEnabled(true);
+            shareCopyBtn.focus();
+          }
+          requestSync(list.id, 220);
+          return true;
+        }catch(error){
+          console.error('Erro ao verificar compartilhamento:', error);
+          if(activeShareCode === shareCode){
+            const message = error && error.code === 'share-timeout'
+              ? 'Não foi possível confirmar a lista no Firebase. Tente novamente.'
+              : 'Erro ao verificar a lista compartilhada. Tente novamente.';
+            setShareDialogStatus(message, true);
+            setShareCopyEnabled(false);
+            if(shareRetryBtn){ shareRetryBtn.hidden = false; }
+          }
+          return false;
+        }
+      }
+
       async function openShareDialog(){
         if(!currentListId) return;
         const list = lists.find(x=>x.id===currentListId);
         if(list && list.imported){ return; }
-        let needsSharing = false;
-        
-        if(list && list.shareCode){
-          activeShareCode = String(list.shareCode).replace(/[^0-9A-Z]/gi,'').toUpperCase().slice(0,6);
-          if(!list.shareCreated){ needsSharing = true; }
+        const existingCode = normalizeCodeValue(list && list.shareCode);
+        const shouldVerifyRemote = existingCode.length === 6;
+
+        if(shouldVerifyRemote){
+          activeShareCode = existingCode;
         } else {
           activeShareCode = generateShareCode();
           if(list){ list.shareCode = activeShareCode; list.shareCreated = false; saveState(); }
-          needsSharing = true;
         }
         
         shareCodeValue.textContent = formatDisplayCode(activeShareCode);
         setShareDialogStatus('', false);
-        setShareCopyEnabled(!needsSharing);
+        setShareCopyEnabled(false);
         if(shareRetryBtn){ shareRetryBtn.hidden = true; }
         shareBackdrop.style.display='flex';
         shareBackdrop.classList.add('show');
         lockScroll();
         applyKeyboardInset();
-        if(needsSharing){ shareCloseBtn.focus(); }
-        else { shareCopyBtn.focus(); }
+        shareCloseBtn.focus();
         if(list){ startRealtimeForList(list.id); }
-        if(needsSharing && list){
+        if(shouldVerifyRemote && list){
+          verifyOrRestoreSharedList(list, activeShareCode);
+        } else if(list){
           runInitialShareSync(list, { showSuccess:true, code:activeShareCode });
         }
       }
