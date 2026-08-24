@@ -19,6 +19,7 @@
       const TASK_PRIORITY_STORAGE_KEY = 'todo_task_priority_v1';
       const TASK_FILTER_STORAGE_KEY = 'todo_task_filter_v1';
       const SHARED_SCHEMA_VERSION = 2;
+      const SHARE_OPERATION_TIMEOUT_MS = 12000;
       const PUBLIC_SHARE_BASE_URL = 'https://malgany.github.io/to-do';
       let completedCollapseByList = {};
       let localOrderByList = {};
@@ -3017,26 +3018,62 @@
         shareCopyFeedback.classList.toggle('error', !!isError);
       }
 
+      function setShareCopyEnabled(enabled){
+        if(!shareCopyBtn){ return; }
+        shareCopyBtn.disabled = !enabled;
+        shareCopyBtn.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+      }
+
+      function waitForShareOperation(operation){
+        let timeoutId = null;
+        const timeout = new Promise((_, reject)=>{
+          timeoutId = setTimeout(()=>{
+            const error = new Error('Tempo limite ao confirmar o compartilhamento.');
+            error.code = 'share-timeout';
+            reject(error);
+          }, SHARE_OPERATION_TIMEOUT_MS);
+        });
+        return Promise.race([Promise.resolve(operation), timeout])
+          .finally(()=>{ if(timeoutId){ clearTimeout(timeoutId); } });
+      }
+
       async function runInitialShareSync(list, options){
-        const opts = Object.assign({ showSuccess:false }, options||{});
-        if(!list || typeof window === 'undefined' || typeof window.firebaseShareList !== 'function'){ return false; }
+        const opts = Object.assign({ showSuccess:false, code:'' }, options||{});
+        const shareCode = normalizeCodeValue(opts.code || (list && list.shareCode) || activeShareCode);
+        setShareCopyEnabled(false);
+        if(!list || shareCode.length !== 6 || typeof window === 'undefined' || typeof window.firebaseShareList !== 'function'){
+          setShareDialogStatus('Compartilhamento indisponível no momento. Tente novamente.', true);
+          if(shareRetryBtn){ shareRetryBtn.hidden = false; }
+          return false;
+        }
         try{
           setShareDialogStatus('Compartilhando lista...', false);
           if(shareRetryBtn){ shareRetryBtn.hidden = true; }
-          await window.firebaseShareList(activeShareCode, buildSyncPayload(list));
+          await waitForShareOperation(window.firebaseShareList(shareCode, buildSyncPayload(list)));
           list.shareCreated = true;
           saveState();
-          if(opts.showSuccess){
-            setShareDialogStatus('Lista compartilhada com sucesso!', false);
-          } else {
-            setShareDialogStatus('', false);
+          if(activeShareCode === shareCode){
+            setShareCopyEnabled(true);
+            if(opts.showSuccess){
+              setShareDialogStatus('Lista compartilhada com sucesso!', false);
+            } else {
+              setShareDialogStatus('', false);
+            }
           }
           requestSync(list.id, 220);
           return true;
         }catch(error){
           console.error('Erro ao compartilhar:', error);
-          setShareDialogStatus('Erro ao compartilhar a lista. Tente novamente.', true);
-          if(shareRetryBtn){ shareRetryBtn.hidden = false; }
+          list.shareCreated = false;
+          saveState();
+          if(activeShareCode === shareCode){
+            const message = error && error.code === 'share-timeout'
+              ? 'Não foi possível confirmar o compartilhamento. Tente novamente.'
+              : 'Erro ao compartilhar a lista. Tente novamente.';
+            setShareDialogStatus(message, true);
+            setShareCopyEnabled(false);
+            if(shareRetryBtn){ shareRetryBtn.hidden = false; }
+          }
           return false;
         }
       }
@@ -3058,15 +3095,17 @@
         
         shareCodeValue.textContent = formatDisplayCode(activeShareCode);
         setShareDialogStatus('', false);
+        setShareCopyEnabled(!needsSharing);
         if(shareRetryBtn){ shareRetryBtn.hidden = true; }
         shareBackdrop.style.display='flex';
         shareBackdrop.classList.add('show');
         lockScroll();
         applyKeyboardInset();
-        shareCopyBtn.focus();
+        if(needsSharing){ shareCloseBtn.focus(); }
+        else { shareCopyBtn.focus(); }
         if(list){ startRealtimeForList(list.id); }
         if(needsSharing && list){
-          runInitialShareSync(list, { showSuccess:true });
+          runInitialShareSync(list, { showSuccess:true, code:activeShareCode });
         }
       }
 
@@ -3142,6 +3181,11 @@
 
       async function attemptCopyShareCode(){
         if(!activeShareCode) return;
+        const list = lists.find((entry)=> entry && entry.id===currentListId);
+        if(!list || !list.shareCreated){
+          notifyCopyFeedback('Aguarde a confirmação do compartilhamento.', true);
+          return;
+        }
         const shareText = buildShareClipboardText(activeShareCode);
         
         const onCopyOk = ()=> {
@@ -5594,7 +5638,7 @@
       if(shareRetryBtn){
         shareRetryBtn.addEventListener('click', ()=>{
           const list = lists.find((entry)=> entry && entry.id===currentListId);
-          if(list){ runInitialShareSync(list, { showSuccess:true }); }
+          if(list){ runInitialShareSync(list, { showSuccess:true, code:activeShareCode }); }
         });
       }
       shareCloseBtn.addEventListener('click', closeShareDialog);

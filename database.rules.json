@@ -1,0 +1,119 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "sharedLists": {
+      "$code": {
+        ".read": true,
+        ".write": true,
+        "meta": {
+          ".validate": "newData.hasChildren(['title','updatedAt','updatedBy','schemaVersion'])",
+          "title": {
+            ".validate": "newData.isString() && newData.val().length <= 200"
+          },
+          "createdAt": {
+            ".validate": "newData.isNumber()"
+          },
+          "updatedAt": {
+            ".validate": "newData.isNumber()"
+          },
+          "updatedBy": {
+            ".validate": "newData.isString() && newData.val().length <= 100"
+          },
+          "schemaVersion": {
+            ".validate": "newData.isNumber() && newData.val() == 2"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "tasks": {
+          "$taskId": {
+            ".validate": "newData.hasChildren(['id','text','done','createdAt','updatedAt','updatedBy','textUpdatedAt','textUpdatedBy','doneUpdatedAt','doneUpdatedBy'])",
+            "id": {
+              ".validate": "newData.isString() && newData.val().length <= 100"
+            },
+            "text": {
+              ".validate": "newData.isString() && newData.val().length <= 500"
+            },
+            "done": {
+              ".validate": "newData.isBoolean()"
+            },
+            "notHave": {
+              ".validate": "newData.isBoolean() && (newData.val() == false || newData.parent().child('done').val() == true)"
+            },
+            "createdAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "updatedAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "updatedBy": {
+              ".validate": "newData.isString() && newData.val().length <= 100"
+            },
+            "deletedAt": {
+              ".validate": "newData.val() == null || newData.isNumber()"
+            },
+            "deletedBy": {
+              ".validate": "newData.val() == null || (newData.isString() && newData.val().length <= 100)"
+            },
+            "textUpdatedAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "textUpdatedBy": {
+              ".validate": "newData.isString() && newData.val().length <= 100"
+            },
+            "doneUpdatedAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "doneUpdatedBy": {
+              ".validate": "newData.isString() && newData.val().length <= 100"
+            },
+            "notHaveUpdatedAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "notHaveUpdatedBy": {
+              ".validate": "newData.isString() && newData.val().length <= 100"
+            },
+            "photos": {
+              ".validate": "newData.val() == null || newData.hasChildren()",
+              "$photoId": {
+                ".validate": "newData.hasChildren(['id','createdAt','updatedAt','updatedBy'])",
+                "id": {
+                  ".validate": "newData.isString() && newData.val().length <= 100"
+                },
+                "dataUrl": {
+                  ".validate": "newData.val() == null || (newData.isString() && newData.val().length <= 400000)"
+                },
+                "createdAt": {
+                  ".validate": "newData.isNumber()"
+                },
+                "updatedAt": {
+                  ".validate": "newData.isNumber()"
+                },
+                "updatedBy": {
+                  ".validate": "newData.isString() && newData.val().length <= 100"
+                },
+                "deletedAt": {
+                  ".validate": "newData.val() == null || newData.isNumber()"
+                },
+                "deletedBy": {
+                  ".validate": "newData.val() == null || (newData.isString() && newData.val().length <= 100)"
+                },
+                "$other": {
+                  ".validate": false
+                }
+              }
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    }
+  }
+}

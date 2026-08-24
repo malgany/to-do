@@ -17,6 +17,7 @@ sharedLists
   {code}
     meta
       title: string
+      createdAt: number
       updatedAt: number
       updatedBy: string
       schemaVersion: 2
@@ -25,6 +26,7 @@ sharedLists
         id: string
         text: string
         done: boolean
+        notHave: boolean
         createdAt: number
         updatedAt: number
         updatedBy: string
@@ -34,6 +36,8 @@ sharedLists
         textUpdatedBy: string
         doneUpdatedAt: number
         doneUpdatedBy: string
+        notHaveUpdatedAt: number
+        notHaveUpdatedBy: string
         photos
           {photoId}
             id: string
@@ -82,6 +86,7 @@ sharedLists/{code}
     "A1B2C3": {
       "meta": {
         "title": "Weekend Chores",
+        "createdAt": 1773206400000,
         "updatedAt": 1773206400000,
         "updatedBy": "client_ab12cd",
         "schemaVersion": 2
@@ -91,6 +96,7 @@ sharedLists/{code}
           "id": "t_lz2v0c_4k9m1p",
           "text": "Clean the kitchen",
           "done": false,
+          "notHave": false,
           "createdAt": 1773206400000,
           "updatedAt": 1773206400000,
           "updatedBy": "client_ab12cd",
@@ -100,6 +106,8 @@ sharedLists/{code}
           "textUpdatedBy": "client_ab12cd",
           "doneUpdatedAt": 1773206400000,
           "doneUpdatedBy": "client_ab12cd",
+          "notHaveUpdatedAt": 1773206400000,
+          "notHaveUpdatedBy": "client_ab12cd",
           "photos": {
             "p_lz2v0c_h41n7q": {
               "id": "p_lz2v0c_h41n7q",
