@@ -1,0 +1,21 @@
+name = "to-do-jev"
+main = "worker.mjs"
+compatibility_date = "2026-09-25"
+workers_dev = true
+preview_urls = false
+
+# Public values. Confirm origin and household ID before publishing.
+# JEV_API_KEY must be added as an encrypted Worker secret, never here.
+[vars]
+ALLOWED_ORIGIN = "https://malgany.github.io"
+FIREBASE_DATABASE_URL = "https://to-do-8574b-default-rtdb.firebaseio.com"
+HOUSEHOLD_ID = "casa_casal"
+JEV_ENABLED = "false"
+
+[[ratelimits]]
+name = "RATE_LIMITER"
+namespace_id = "20260925"
+simple = { limit = 10, period = 60 }
+
+[observability]
+enabled = false

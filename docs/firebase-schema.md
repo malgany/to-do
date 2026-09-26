@@ -1,6 +1,41 @@
 # Firebase Shared List Schema (v2)
 
-This document reflects the current shared-list format written and read by the app.
+This document describes legacy shared codes (v2) and the separate authenticated shopping household namespace. Legacy codes remain compatible.
+
+## Authenticated shopping household (Spark)
+
+```text
+householdAccess/{householdId}/{uid}: true
+householdUsers/{uid}/householdId: string
+households/{householdId}
+  name: string
+  records/{listId}
+    list: JSON string (working list, tasks and photos; max 7,000,000 characters)
+    revision: integer, incremented once per changed transaction
+    closedAt?: timestamp
+    deletedAt?: timestamp
+    deletedBy?: string
+    purchase?
+      data: JSON string (purchase identity and item outcomes, no photos; max 1,500,000 characters)
+      revision: integer, initially 1; correction increments by 1
+      occurredAt: timestamp
+      mode: complete | quick
+      deletedAt?: timestamp
+  preferences/{productKey}: { categoryId?, blocked?, updatedAt, updatedBy }
+  preferences/_settings: { jevEnabled, updatedAt, updatedBy }
+```
+
+The administrator provisions exactly the two authorized UIDs and their profile links. Client writes to ACL/profile mappings are denied. A user reads only their own profile; only members read a household and its ACL. There are no client-created households, invitation tokens, Firebase Functions or Admin SDK credentials.
+
+Every list is updated through a client transaction on its own record. The semantic snapshot is checked inside the retried transaction. Closing a list and creating its purchase happen atomically. Repeating a close returns the existing purchase. Closed list content is immutable byte-for-byte; only its deletion tombstone can be added. Purchase correction increments its own revision and the record revision. Physical record deletion, reopening and removing a closed record's purchase are denied.
+
+The rules validate access, allowed envelope fields, string sizes, revision increments, dates and the closed/purchase relationship. They cannot parse the inner JSON: its item schema is validated by the client, and both authorized people are trusted coauthors. Malformed inner content is rejected by the reader with a data error. This design is for a private household, not adversarial member auditing. Empty arrays remain intact in the JSON strings.
+
+Inside `list`: id, purchaseId (= listId), householdId, title, kind, sourceRef?, metadata timestamps, tasks. Each task retains text/completion/deletion/photo versions and shopping metadata (productKey, name, categoryId, source, sourceText, quantity/unit when present). Local UI ordering and pending flags are omitted. The purchase JSON contains id/listId/sourceRef, kind/title and items with bought/missing/pending outcomes. Its envelope is authoritative for mode, date, revision and deletion.
+
+The optional Cloudflare Worker uses the user's Firebase ID token for read-only REST access to the ACL and Jev preference. It has no administrative access. No Jev API secret is stored in this database or frontend.
+
+See [shopping.md](shopping.md) for implementation and [PREPARAR-CHROME.md](PREPARAR-CHROME.md) for the later configuration session. The shape below applies **only** to legacy `sharedLists/{code}`.
 
 ## Realtime Database Path
 

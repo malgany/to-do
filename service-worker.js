@@ -1,10 +1,18 @@
-const CACHE_NAME = 'todo-pwa-v48';
+const CACHE_NAME = 'todo-pwa-v50';
 const ASSETS = [
   './',
   './index.html',
-  './style.css?v=1.3.1',
-  './script.js?v=1.6.3',
-  './vendor/sortable.min.js',
+  './style.css?v=1.4.0',
+  './script.js?v=1.7.0',
+  './vendor/sortable.min.js?v=1.15.0',
+  './shopping-catalog.js?v=1',
+  './shopping-core.js?v=1',
+  './household-model.js?v=1',
+  './shopping-remote.js?v=1',
+  './shopping-config.js?v=1',
+  './shopping-store.js?v=1',
+  './shopping-ui.js?v=1',
+  './shopping-cloud.js?v=1',
   './manifest.json?v=1.0.1',
   './assets/quick-lists/quick-market.jpg',
   './assets/quick-lists/quick-pharmacy.jpg',
@@ -33,6 +41,8 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
+  // Never cache Firebase API, authentication, function or model responses.
+  if(url.origin !== self.location.origin && !(url.hostname === 'www.gstatic.com' && url.pathname.startsWith('/firebasejs/'))) return;
   const isFreshAsset = request.mode === 'navigate' || ['.html', '.js', '.css'].some((ext) => url.pathname.endsWith(ext));
   if (isFreshAsset) {
     event.respondWith(
@@ -40,7 +50,7 @@ self.addEventListener('fetch', (event) => {
         const copy = response.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
         return response;
-      }).catch(() => caches.match(request).then((cached) => cached || caches.match('./index.html')))
+      }).catch(() => caches.match(request).then((cached) => cached || (request.mode === 'navigate' ? caches.match('./index.html') : Response.error())))
     );
     return;
   }
@@ -51,7 +61,7 @@ self.addEventListener('fetch', (event) => {
         const copy = response.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
         return response;
-      }).catch(() => caches.match('./index.html'));
+      }).catch(() => request.mode === 'navigate' ? caches.match('./index.html') : Response.error());
     })
   );
 });

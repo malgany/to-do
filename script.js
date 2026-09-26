@@ -1,5 +1,7 @@
 (function(){
       // State
+      let shopping = null;
+      let pendingQuickItems = [];
       let lists = []; // {id, title, tasks: [{id,text,done,photos:[], ...syncMeta}]} 
       let currentListId = null;
       let currentTaskId = null;
@@ -345,274 +347,7 @@
       };
       const pendingDeleteUndos = new Map();
       const pendingTaskCompletionIds = new Set();
-      const QUICK_LIST_TEMPLATES = [
-        {
-          id: 'mercado',
-          title: 'Mercado',
-          subtitle: 'Despensa, feira, carnes e casa',
-          image: './assets/quick-lists/quick-market.jpg',
-          groups: [
-            {
-              id: 'basicos',
-              title: 'Básicos',
-              items: [
-                { id: 'arroz-branco', name: 'Arroz branco', unitSingular: 'pacote', unitPlural: 'pacotes' },
-                { id: 'arroz-integral', name: 'Arroz integral', unitSingular: 'pacote', unitPlural: 'pacotes' },
-                { id: 'feijao', name: 'Feijão', quantity: 2, unitSingular: 'pacote', unitPlural: 'pacotes' },
-                { id: 'farinha-trigo', name: 'Farinha de trigo', unitSingular: 'pacote', unitPlural: 'pacotes' },
-                { id: 'trigo-integral', name: 'Trigo integral', unitSingular: 'pacote', unitPlural: 'pacotes' },
-                { id: 'oleo-cozinha', name: 'Óleo de cozinha', unitSingular: 'unidade', unitPlural: 'unidades' },
-                { id: 'macarrao', name: 'Macarrão', quantity: 2, unitSingular: 'pacote', unitPlural: 'pacotes' },
-                { id: 'acucar-refinado', name: 'Açúcar refinado', unitSingular: 'pacote', unitPlural: 'pacotes' },
-                { id: 'massa-pastel', name: 'Massa para pastel', unitSingular: 'pacote', unitPlural: 'pacotes' }
-              ]
-            },
-            {
-              id: 'padaria-cafe',
-              title: 'Padaria e café',
-              items: [
-                { id: 'pao', name: 'Pão' },
-                { id: 'cafe-po', name: 'Café em pó', unitSingular: 'pacote', unitPlural: 'pacotes' },
-                { id: 'cafe-capsula', name: 'Café cápsula', detail: 'descafeinado, se tiver', taskText: 'Café cápsula descafeinado, se tiver' },
-                { id: 'leite', name: 'Leite', quantity: 2, unitSingular: 'unidade', unitPlural: 'unidades' },
-                { id: 'biscoito-agua-sal', name: 'Biscoito água e sal', unitSingular: 'pacote', unitPlural: 'pacotes' },
-                { id: 'biscoito-sequilhos', name: 'Biscoito sequilhos', unitSingular: 'pacote', unitPlural: 'pacotes' },
-                { id: 'biscoito-polvilho-alice', name: 'Biscoito de polvilho', detail: 'para Alice', taskText: 'Biscoito de polvilho para Alice', unitSingular: 'pacote', unitPlural: 'pacotes' },
-                { id: 'geleia', name: 'Geleia', detail: 'morango ou outro sabor para matcha' },
-                { id: 'amendoim-japones', name: 'Amendoim japonês', unitSingular: 'pacote', unitPlural: 'pacotes' },
-                { id: 'cha-camomila', name: 'Chá de camomila', unitSingular: 'caixa', unitPlural: 'caixas' },
-                { id: 'cha-capim-cidreira', name: 'Chá de capim cidreira', unitSingular: 'caixa', unitPlural: 'caixas' },
-                { id: 'cha-mate', name: 'Chá de mate', unitSingular: 'caixa', unitPlural: 'caixas' },
-                { id: 'cacau-50', name: 'Cacau 50%' }
-              ]
-            },
-            {
-              id: 'hortifruti',
-              title: 'Hortifruti',
-              items: [
-                { id: 'uva', name: 'Uva' },
-                { id: 'banana', name: 'Banana' },
-                { id: 'morango', name: 'Morango' },
-                { id: 'tangerina', name: 'Tangerina' },
-                { id: 'limao', name: 'Limão' },
-                { id: 'alho', name: 'Alho', quantity: 4, unitSingular: 'cabeça', unitPlural: 'cabeças' },
-                { id: 'cebola', name: 'Cebola', quantity: 3, unitSingular: 'unidade', unitPlural: 'unidades' },
-                { id: 'alho-poro', name: 'Alho-poró' },
-                { id: 'batata', name: 'Batata' },
-                { id: 'batata-doce', name: 'Batata-doce' },
-                { id: 'abobora-cabotia', name: 'Abóbora cabotiá' },
-                { id: 'cenoura', name: 'Cenoura' },
-                { id: 'tomate', name: 'Tomate' },
-                { id: 'quiabo', name: 'Quiabo' },
-                { id: 'milho-verde', name: 'Milho verde', unitSingular: 'unidade', unitPlural: 'unidades' },
-                { id: 'ervilha-congelada', name: 'Ervilha congelada', unitSingular: 'pacote', unitPlural: 'pacotes' },
-                { id: 'seleta-legumes', name: 'Seleta de legumes congelada', unitSingular: 'pacote', unitPlural: 'pacotes' }
-              ]
-            },
-            {
-              id: 'carnes-frios',
-              title: 'Carnes e frios',
-              items: [
-                { id: 'carne-moida', name: 'Carne moída', unitSingular: 'kg', unitPlural: 'kg', alwaysShowUnit: true },
-                { id: 'peito-frango', name: 'Peito de frango', unitSingular: 'kg', unitPlural: 'kg', alwaysShowUnit: true },
-                { id: 'coxa-sobrecoxa', name: 'Coxa e sobrecoxa de frango', unitSingular: 'kg', unitPlural: 'kg', alwaysShowUnit: true },
-                { id: 'presunto-fatiado', name: 'Presunto fatiado', unitSingular: 'g', unitPlural: 'g', quantity: 200, step: 100, min: 100, max: 1000, alwaysShowUnit: true },
-                { id: 'mucarela-fatiada', name: 'Queijo muçarela fatiado', unitSingular: 'g', unitPlural: 'g', quantity: 200, step: 100, min: 100, max: 1000, alwaysShowUnit: true },
-                { id: 'ovos', name: 'Ovos', unitSingular: 'dúzia', unitPlural: 'dúzias', alwaysShowUnit: true }
-              ]
-            },
-            {
-              id: 'laticinios-conservas',
-              title: 'Laticínios e conservas',
-              items: [
-                { id: 'creme-leite', name: 'Creme de leite', quantity: 2, unitSingular: 'unidade', unitPlural: 'unidades' },
-                { id: 'requeijao', name: 'Requeijão' },
-                { id: 'iogurte-natural', name: 'Iogurte natural' },
-                { id: 'manteiga', name: 'Manteiga' },
-                { id: 'queijo-parmesao', name: 'Queijo parmesão ralado', detail: 'para macarrão' },
-                { id: 'cogumelo', name: 'Cogumelo champignon em conserva' },
-                { id: 'azeitona', name: 'Azeitona sem caroço' },
-                { id: 'palmito', name: 'Palmito' }
-              ]
-            },
-            {
-              id: 'temperos-molhos',
-              title: 'Temperos e molhos',
-              items: [
-                { id: 'tempero-fit-frango', name: 'Tempero Fit Frango BR Spices' },
-                { id: 'tempero-dry-rub', name: 'Tempero Dry Rub BR Spices' },
-                { id: 'tempero-caldo-legumes', name: 'Tempero Caldo de Legumes BR Spices' },
-                { id: 'tempero-chimichurri', name: 'Tempero Chimichurri' },
-                { id: 'molho-ingles', name: 'Molho inglês' },
-                { id: 'azeite', name: 'Azeite' },
-                { id: 'molho-tomate', name: 'Molho de tomate' },
-                { id: 'colorau', name: 'Colorau' }
-              ]
-            },
-            {
-              id: 'limpeza',
-              title: 'Limpeza',
-              items: [
-                { id: 'papel-toalha-banheiro', name: 'Papel toalha', detail: 'para o banheiro' },
-                { id: 'papel-higienico', name: 'Papel higiênico' },
-                { id: 'luva-louca', name: 'Luva de borracha para lavar louça G' },
-                { id: 'saco-lixo-15', name: 'Saco de lixo 15 L', unitSingular: 'rolo', unitPlural: 'rolos' },
-                { id: 'saco-lixo-30', name: 'Saco de lixo 30 L', unitSingular: 'rolo', unitPlural: 'rolos' },
-                { id: 'saco-lixo-100', name: 'Saco de lixo 100 L', unitSingular: 'rolo', unitPlural: 'rolos' },
-                { id: 'sabao-lava-louca', name: 'Sabão para máquina de lavar louça' },
-                { id: 'detergente-neutro', name: 'Detergente neutro', detail: 'sem ser da Ypê' },
-                { id: 'sabao-liquido-roupa', name: 'Sabão líquido para lavar roupa', detail: 'Ariel ou Olá roupas delicadas' },
-                { id: 'amaciante', name: 'Amaciante' },
-                { id: 'sabao-liquido-maos', name: 'Sabão líquido para as mãos' },
-                { id: 'limpador-multiuso', name: 'Limpador multiuso' },
-                { id: 'desengordurante-cozinha', name: 'Desengordurante de cozinha' }
-              ]
-            },
-            {
-              id: 'higiene',
-              title: 'Higiene pessoal',
-              items: [
-                { id: 'absorvente-abas', name: 'Absorvente com abas Sempre Livre' },
-                { id: 'creme-rosto-nivea', name: 'Creme para o rosto Nívea' },
-                { id: 'sabonete', name: 'Sabonete' },
-                { id: 'shampoo-elseve', name: 'Shampoo Elseve Óleo Extraordinário' },
-                { id: 'condicionador', name: 'Condicionador' },
-                { id: 'mascara-hidratacao-capilar', name: 'Máscara de hidratação capilar' }
-              ]
-            }
-          ]
-        },
-        {
-          id: 'farmacia',
-          title: 'Farmácia',
-          subtitle: 'Remédios, bebê e cuidados',
-          image: './assets/quick-lists/quick-pharmacy.jpg',
-          groups: [
-            {
-              id: 'medicamentos',
-              title: 'Medicamentos',
-              items: [
-                { id: 'dipirona-gotas', name: 'Dipirona em gotas adulto' },
-                { id: 'advil', name: 'Advil' },
-                { id: 'histamin', name: 'Histamin' },
-                { id: 'alopurinol', name: 'Alopurinol 100mg' },
-                { id: 'soro-fisiologico', name: 'Soro fisiológico' }
-              ]
-            },
-            {
-              id: 'suplementos',
-              title: 'Suplementos',
-              items: [
-                { id: 'feminis', name: 'Feminis suplemento alimentar cápsulas' },
-                { id: 'zirvit-kids', name: 'Zirvit Kids Max', detail: 'suplemento alimentar em suspensão' }
-              ]
-            },
-            {
-              id: 'bebe-crianca',
-              title: 'Bebê e criança',
-              items: [
-                { id: 'bepantol-baby', name: 'Bepantol Baby' },
-                { id: 'lenco-johnson-rn', name: 'Lenço umedecido Johnson recém-nascido', detail: '96 folhas' },
-                { id: 'escova-dentes-2-anos', name: 'Escova de dentes 2 anos +' },
-                { id: 'papinha-papapa', name: 'Papinha Papapá' },
-                { id: 'biscoito-papapa', name: 'Biscoito Papapá' }
-              ]
-            },
-            {
-              id: 'pele-banho',
-              title: 'Pele e banho',
-              items: [
-                { id: 'gel-banho-mustela', name: 'Gel de banho Mustela cabelo e corpo' },
-                { id: 'hidratante-infantil', name: 'Hidratante infantil', detail: 'Mustela Stelatopia+, CeraVe ou Cetaphil', taskText: 'Hidratante Mustela Stelatopia+, CeraVe ou Cetaphil' }
-              ]
-            },
-            {
-              id: 'primeiros-socorros',
-              title: 'Primeiros socorros',
-              items: [
-                { id: 'curativos-adesivos', name: 'Curativos adesivos', unitSingular: 'caixa', unitPlural: 'caixas' },
-                { id: 'gaze-esteril', name: 'Gaze estéril', unitSingular: 'pacote', unitPlural: 'pacotes' },
-                { id: 'esparadrapo', name: 'Esparadrapo' },
-                { id: 'fita-micropore', name: 'Fita micropore' },
-                { id: 'atadura-crepe', name: 'Atadura de crepe' },
-                { id: 'algodao', name: 'Algodão', unitSingular: 'pacote', unitPlural: 'pacotes' },
-                { id: 'alcool-70', name: 'Álcool 70%' },
-                { id: 'antisseptico', name: 'Antisséptico' },
-                { id: 'termometro-digital', name: 'Termômetro digital' },
-                { id: 'luvas-descartaveis', name: 'Luvas descartáveis', unitSingular: 'caixa', unitPlural: 'caixas' }
-              ]
-            },
-            {
-              id: 'maternidade',
-              title: 'Maternidade',
-              items: [
-                { id: 'absorvente-seios', name: 'Absorvente para os seios' }
-              ]
-            }
-          ]
-        },
-        {
-          id: 'pet',
-          title: 'Pet',
-          subtitle: 'Alimentação, proteção e saúde',
-          image: './assets/quick-lists/quick-pet.jpg',
-          groups: [
-            {
-              id: 'alimentacao',
-              title: 'Alimentação',
-              items: [
-                { id: 'racao-seca', name: 'Ração seca' },
-                { id: 'racao-umida', name: 'Ração úmida' },
-                { id: 'petiscos', name: 'Petiscos' },
-                { id: 'comedouro', name: 'Comedouro' },
-                { id: 'bebedouro', name: 'Bebedouro' },
-                { id: 'racao-senior', name: 'Ração sênior' },
-                { id: 'racao-senior-golden', name: 'Ração sênior Golden' }
-              ]
-            },
-            {
-              id: 'passeio-seguranca',
-              title: 'Passeio e segurança',
-              items: [
-                { id: 'coleira-identificacao', name: 'Coleira com identificação' },
-                { id: 'guia', name: 'Guia' },
-                { id: 'peitoral', name: 'Peitoral' },
-                { id: 'caixa-transporte', name: 'Caixa de transporte' }
-              ]
-            },
-            {
-              id: 'casa-higiene',
-              title: 'Casa e higiene',
-              items: [
-                { id: 'cama-pet', name: 'Cama para pet' },
-                { id: 'brinquedos-pet', name: 'Brinquedos para pet' },
-                { id: 'escova-pente-pet', name: 'Escova e pente para pet' },
-                { id: 'escova-dentes-pet', name: 'Escova de dentes para pet' },
-                { id: 'caixa-areia', name: 'Caixa de areia' },
-                { id: 'areia-higienica', name: 'Areia higiênica' }
-              ]
-            },
-            {
-              id: 'antiparasitarios',
-              title: 'Antiparasitários',
-              items: [
-                { id: 'coleira-leishmania', name: 'Coleira de leishmania' },
-                { id: 'bravecto', name: 'Bravecto' },
-                { id: 'vermifugo-topdog-milbemax', name: 'Top Dog vermífugo 10kg ou Milbemax 5 a 25kg' }
-              ]
-            },
-            {
-              id: 'saude',
-              title: 'Saúde',
-              items: [
-                { id: 'ograx-derme', name: 'Ograx Derme 10' },
-                { id: 'gaviz', name: 'Gaviz 10mg' },
-                { id: 'hepvet', name: 'Hepvet' }
-              ]
-            }
-          ]
-        }
-      ];
+      const QUICK_LIST_TEMPLATES = window.ShoppingCatalog;
       let isSelectionMode = false;
       let selectedTaskIds = new Set();
       let activePhotoId = null;
@@ -1375,6 +1110,7 @@
       }
 
       function openPhotoPicker(kind){
+        if(shopping?.guard(lists.find(l=>l.id===currentListId))) return;
         const task = getCurrentTask();
         if(!task){
           showToast('Abra uma tarefa para adicionar fotos.', { type: 'error' });
@@ -1430,6 +1166,7 @@
       }
 
       function deleteActivePhoto(){
+        if(shopping?.guard(lists.find(l=>l.id===currentListId))) return;
         if(!currentListId || !currentTaskId || !activePhotoId) return;
         const list = lists.find((x)=>x && x.id===currentListId);
         if(!list || !Array.isArray(list.tasks)) return;
@@ -1465,6 +1202,7 @@
       }
 
       async function addPhotosToCurrentTask(files){
+        if(shopping?.guard(lists.find(l=>l.id===currentListId))) return;
         const task = getCurrentTask();
         if(!task){
           showToast('Abra uma tarefa para adicionar fotos.', { type: 'error' });
@@ -1914,7 +1652,7 @@
           const raw = localStorage.getItem('todo_lists_v3');
           if(raw){
             const parsed = JSON.parse(raw);
-            lists = Array.isArray(parsed) ? parsed : [];
+            lists = Array.isArray(parsed) ? parsed.filter(l=>!l.householdId) : [];
           }
         }catch(e){
           lists = [];
@@ -2232,6 +1970,7 @@
       function markTaskDeleted(task, timestamp, actor){
         if(!task){ return; }
         task.deletedAt = normalizeTimestamp(timestamp, nowTs());
+        task.deletionUpdatedAt = task.deletedAt; task.deletionUpdatedBy = actor || clientId;
         task.deletedBy = normalizeActor(actor, clientId);
         refreshTaskAggregateMetadata(task);
       }
@@ -2240,6 +1979,7 @@
         if(!task){ return; }
         task.deletedAt = null;
         task.deletedBy = '';
+        task.deletionUpdatedAt = normalizeTimestamp(timestamp, nowTs()); task.deletionUpdatedBy = actor || clientId;
         task.updatedAt = normalizeTimestamp(timestamp, nowTs());
         task.updatedBy = normalizeActor(actor, clientId);
       }
@@ -2275,6 +2015,7 @@
       }
 
       function markPhotoDeleted(task, photoId, timestamp, actor){
+        if(shopping?.guard(lists.find(l=>l.id===currentListId))) return;
         if(!task || !photoId){ return null; }
         const photo = findPhotoById(task, photoId, true);
         if(!photo){ return null; }
@@ -2330,6 +2071,8 @@
         const merged = {
           id: left.id || right.id,
           text: useRemoteText ? right.text : left.text,
+          shopping: useRemoteText ? (right.shopping || (right.text===left.text ? left.shopping : undefined)) : left.shopping,
+          shoppingUpdatedAt: left.shoppingUpdatedAt || 0, shoppingUpdatedBy: left.shoppingUpdatedBy || '',
           done: useRemoteDone ? right.done : left.done,
           createdAt: Math.min(normalizeTimestamp(left.createdAt, nowTs()), normalizeTimestamp(right.createdAt, nowTs())),
           textUpdatedAt: useRemoteText ? right.textUpdatedAt : left.textUpdatedAt,
@@ -2682,6 +2425,7 @@
       function requestSync(listId, delayMs){
         try{
           const list = lists.find((entry)=> entry && entry.id===listId);
+          if(list && list.householdId && shopping){ shopping.onMutation(list); return; }
           if(!list || !canSyncList(list)) return;
           const wait = typeof delayMs === 'number' ? Math.max(0, delayMs) : 180;
           if(syncTimers[listId]){ clearTimeout(syncTimers[listId]); }
@@ -2787,7 +2531,8 @@
 
       function saveState(){
         ensureListsStructure();
-        localStorage.setItem(LIST_STORAGE_KEY, JSON.stringify(lists));
+        localStorage.setItem(LIST_STORAGE_KEY, JSON.stringify(lists.filter(l=>!l.householdId)));
+        if(shopping) shopping.save(lists);
         saveSyncOutboxState();
       }
 
@@ -2796,7 +2541,7 @@
           const raw = localStorage.getItem(LIST_STORAGE_KEY) || localStorage.getItem(LEGACY_LIST_STORAGE_KEY);
           if(raw){
             const parsed = JSON.parse(raw);
-            lists = Array.isArray(parsed) ? parsed : [];
+            lists = Array.isArray(parsed) ? parsed.filter(l=>!l.householdId) : [];
           }
         }catch(_){
           lists = [];
@@ -3119,6 +2864,7 @@
       async function openShareDialog(){
         if(!currentListId) return;
         const list = lists.find(x=>x.id===currentListId);
+        if(list && list.householdId && shopping){ shopping.openHome(); return; }
         if(list && list.imported){ return; }
         const existingCode = normalizeCodeValue(list && list.shareCode);
         const shouldVerifyRemote = existingCode.length === 6;
@@ -3181,23 +2927,8 @@
             const keys = await caches.keys();
             await Promise.all(keys.map(k=>caches.delete(k)));
           }
-          // Clear local storage/state
-          try { localStorage.clear(); } catch(e){}
-          try { sessionStorage.clear(); } catch(e){}
-          // Clear IndexedDB (best-effort)
-          if('indexedDB' in window && indexedDB.databases){
-            try{
-              const dbs = await indexedDB.databases();
-              await Promise.all((dbs||[]).map(db => {
-                if(db && db.name){
-                  return new Promise((resolve)=>{
-                    const req = indexedDB.deleteDatabase(db.name);
-                    req.onsuccess = req.onerror = req.onblocked = ()=>resolve();
-                  });
-                }
-              }));
-            }catch(e){ /* ignore */ }
-          }
+          // Preserve authentication, lists, purchase history and pending operations.
+
         } finally {
           location.reload();
         }
@@ -3718,10 +3449,11 @@
       function countQuickSelections(templateId){
         const template = getQuickTemplateById(templateId);
         if(!template){ return 0; }
-        return (template.groups || []).reduce((total, group)=> total + countQuickSelectionsForGroup(template, group), 0);
+        return (template.groups || []).reduce((total, group)=> total + countQuickSelectionsForGroup(template, group), 0) + (shopping?.quickExtras[templateId]?.length || 0);
       }
 
       function resetQuickListBuilder(){
+        if(shopping) shopping.resetQuick();
         activeQuickTemplateId = null;
         activeQuickGroupId = null;
         quickSelectionState = {};
@@ -3784,21 +3516,17 @@
         return `${base} - ${formatQuickNumber(quantity)} ${getQuickUnitLabel(item, quantity)}`;
       }
 
-      function buildQuickListTaskTexts(){
+      function buildQuickListItems(){
         const template = getQuickTemplateById(activeQuickTemplateId);
-        if(!template){ return []; }
-        const texts = [];
-        (template.groups || []).forEach((group)=>{
-          (group.items || []).forEach((item)=>{
-            const state = getQuickItemState(template.id, group.id, item);
-            if(state.selected){
-              const text = formatQuickListTaskText(item, state);
-              if(text){ texts.push(text); }
-            }
-          });
-        });
-        return texts;
+        if(!template) return [];
+        const items = [];
+        template.groups.forEach(group=>group.items.forEach(item=>{
+          const state=getQuickItemState(template.id,group.id,item);
+          if(state.selected) items.push({productKey:item.id,name:item.name,baseText:getQuickItemBaseText(item),categoryId:group.id,source:'catalog',sourceText:ShoppingCore.normalize(getQuickItemBaseText(item)),quantity:state.quantity,unit:getQuickUnitLabel(item,state.quantity),text:formatQuickListTaskText(item,state)});
+        }));
+        return items.concat(shopping ? (shopping.quickExtras[template.id] || []) : []);
       }
+      function buildQuickListTaskTexts(){ return buildQuickListItems().map(i=>i.text); }
 
       function updateQuickSaveState(){
         const count = countQuickSelections(activeQuickTemplateId);
@@ -3971,6 +3699,7 @@
       }
 
       function renderQuickList(){
+        if(shopping) shopping.renderQuick(activeQuickTemplateId);
         const template = getQuickTemplateById(activeQuickTemplateId);
         if(!quickListTitle || !quickListSubtitle || !quickBuilder){ return; }
         if(!template){
@@ -3996,7 +3725,8 @@
       function openQuickListNameModal(){
         const template = getQuickTemplateById(activeQuickTemplateId);
         if(!template){ return; }
-        pendingQuickListTaskTexts = buildQuickListTaskTexts();
+        pendingQuickItems = buildQuickListItems();
+        pendingQuickListTaskTexts = pendingQuickItems.map(i=>i.text);
         if(!pendingQuickListTaskTexts.length){
           showToast('Selecione pelo menos um item.', { type: 'error' });
           return;
@@ -4192,6 +3922,7 @@
       }
 
       function openModal(mode, listId, options){
+        if(shopping) shopping.setCreationMode(mode,activeQuickTemplateId);
         const opts = Object.assign({ title:'' }, options||{});
         // mode: 'create' or 'rename'
         modalBackdrop.style.display='flex';
@@ -4328,7 +4059,7 @@
           if(opts.showErrors){ showToast('Código não encontrado.', { type: 'error' }); }
           return null;
         }
-        const id = 'l_'+Date.now();
+        const id = 'l_'+crypto.randomUUID();
         const title = remote.title || 'Lista Importada';
         const tasks = [];
         if(Array.isArray(remote.tasks)){
@@ -4394,7 +4125,7 @@
       function createListFromModal(){
         const title = listNameInput.value.trim(); if(!title) return;
         const isQuickListCreation = modalBackdrop.dataset.mode === 'createFromQuickList';
-        const id = 'l_'+Date.now();
+        const id = 'l_'+crypto.randomUUID();
         const ts = nowTs();
         const initialTexts = isQuickListCreation
           ? pendingQuickListTaskTexts.slice()
@@ -4417,8 +4148,13 @@
           return task;
         });
         const newList = { id, title, tasks, createdAt: ts, metaUpdatedAt: ts, metaUpdatedBy: clientId, clientId, shareCreated:false };
+        if(shopping){
+          if(isQuickListCreation) tasks.forEach((task,index)=>{ const {text,...info}=pendingQuickItems[index];task.shopping=info;task.shoppingUpdatedAt=ts;task.shoppingUpdatedBy=clientId; });
+          shopping.attachList(newList,isQuickListCreation ? activeQuickTemplateId : shopping.kindSelect.value);
+        }
         ensureListStructure(newList);
         lists.push(newList);
+        if(shopping) shopping.onMutation(newList);
         updateLocalOrderForList(id);
         saveState();
         renderLists();
@@ -4431,6 +4167,7 @@
       }
 
       function saveRenameFromModal(){
+        if(shopping?.guard(lists.find(l=>l.id===currentListId))) return;
         const id = modalBackdrop.dataset.listId; const title = listNameInput.value.trim(); if(!title) return;
         const list = lists.find(x=>x.id===id);
         if(list){
@@ -4478,6 +4215,10 @@
         // populate task
         if(taskDetailListName){ taskDetailListName.textContent = list.title || 'Lista'; }
         taskDetailText.textContent = task.text || '';
+        taskDetailText.contentEditable = shopping?.isLocked(list) ? 'false' : 'true';
+        taskDetailCheckbox.disabled = !!shopping?.isLocked(list);
+        for(const control of [taskDeleteButton,cameraPhotoButton,galleryPhotoButton]) if(control) control.disabled=!!shopping?.isLocked(list);
+        if(shopping) shopping.renderDetail(list,task);
         taskDetailText.setAttribute('data-placeholder','Renomear tarefa');
         lastValidTaskText = task.text || '';
         renderTaskPriorityControls();
@@ -4525,6 +4266,7 @@
         body.className = 'task-body';
 
         const cb = document.createElement('button');
+        cb.disabled = !!shopping?.isLocked(lists.find(l=>l.id===currentListId));
         if(isDone){
           cb.className = `checkbox-round checked${isNotHave ? ' not-have' : ''}`;
           cb.setAttribute('aria-pressed', 'true');
@@ -4630,6 +4372,7 @@
         handle.className = 'drag-handle';
         handle.setAttribute('aria-label', `Reordenar ${task.text}`);
         handle.appendChild(createDragHandleIconSvg());
+        handle.hidden=!!shopping?.isLocked(lists.find(l=>l.id===currentListId));
         handle.addEventListener('click', (ev)=> ev.preventDefault());
 
         if(isSelectionMode){
@@ -4761,6 +4504,8 @@
         tasksContainer.innerHTML=''; completedList.innerHTML='';
         const list = lists.find(x=>x.id===currentListId);
         if(!list) return;
+        if(shopping){ shopping.prepare(list); shopping.renderBar(list); }
+        openComposer.hidden=!!shopping?.isLocked(list);
         if(selectedTaskIds.size){
           selectedTaskIds = new Set(Array.from(selectedTaskIds).filter((taskId)=> !!findTaskById(list, taskId, false)));
         }
@@ -4801,7 +4546,9 @@
           }
 
           let renderedCount = 0;
-          if(currentTaskFilter === 'all'){
+          if(shopping && shopping.renderCategories(list,tasksContainer,currentTaskFilter,(task,done)=>buildTaskElement(task,done,priorityByTask.get(task.id),duplicateCounts))){
+            renderedCount = tasksContainer.querySelectorAll('.task').length;
+          } else if(currentTaskFilter === 'all'){
             if(active.length){
               renderTasksWithGroups(active, tasksContainer, groups, false, priorityByTask, duplicateCounts);
               renderedCount += active.length;
@@ -4838,7 +4585,7 @@
           }
 
           if(taskReorderHint){
-            const canReorder = renderedCount >= 2 && !isSelectionMode;
+            const canReorder = renderedCount >= 2 && !isSelectionMode && !shopping?.isLocked(list);
             taskReorderHint.hidden = !canReorder;
           }
         }
@@ -4860,7 +4607,7 @@
         // Inicializar sortable para as tarefas após renderização
         updateSelectionToolbar();
         if(openComposer){
-          openComposer.hidden = isSelectionMode;
+          openComposer.hidden = isSelectionMode || !!shopping?.isLocked(list);
           openComposer.style.display = isSelectionMode ? 'none' : '';
         }
         if(isSelectionMode){
@@ -5042,6 +4789,7 @@
       }
 
       function toggleTaskDone(taskId, markDone, options){
+        if(shopping?.guard(lists.find(l=>l.id===currentListId))) return;
         const opts = Object.assign({ animateReflow:false, previousPositions:null }, options||{});
         const list = lists.find(x=>x.id===currentListId); if(!list) return;
         const task = findTaskById(list, taskId, false); if(!task) return;
@@ -5087,6 +4835,7 @@
       }
 
       function toggleTaskNotHave(taskId, markNotHave){
+        if(shopping?.guard(lists.find(l=>l.id===currentListId))) return;
         const list = lists.find((entry)=> entry && entry.id===currentListId); if(!list) return;
         const task = findTaskById(list, taskId, false); if(!task) return;
         const ts = nowTs();
@@ -5128,6 +4877,7 @@
       }
 
       function restoreDeletedTask(taskId){
+        if(shopping?.guard(lists.find(l=>l.id===currentListId))) return;
         const undoInfo = pendingDeleteUndos.get(taskId);
         if(!undoInfo){ return; }
         pendingDeleteUndos.delete(taskId);
@@ -5158,6 +4908,7 @@
       }
 
       function deleteTask(taskId, options){
+        if(shopping?.guard(lists.find(l=>l.id===currentListId))) return;
         const opts = Object.assign({ allowUndo:false }, options||{});
         const list = lists.find(x=>x.id===currentListId); if(!list) return;
         const task = findTaskById(list, taskId, false); if(!task) return;
@@ -5384,6 +5135,7 @@
 
       // Composer controls (overlay)
       function showComposer(){
+        if(shopping?.guard(lists.find(l=>l.id===currentListId))) return;
         if(isSelectionMode){ return; }
         composerBackdrop.style.display='flex';
         composerBackdrop.classList.add('show');
@@ -5409,6 +5161,7 @@
       }
 
       function sendTaskNow(){
+        if(shopping?.guard(lists.find(l=>l.id===currentListId))) return;
         const text = composerInput.value.trim(); if(!text) return;
         const list = lists.find(x=>x.id===currentListId); if(!list) return;
         const ts = nowTs();
@@ -5457,6 +5210,7 @@
         if(!currentListId || !currentTaskId) return;
         const list = lists.find(x=>x.id===currentListId); if(!list) return;
         const task = findTaskById(list, currentTaskId, false); if(!task) return;
+        if(shopping?.guard(list)) return;
         const trimmed = (taskDetailText.textContent || '').trim();
         const ts = nowTs();
         if(trimmed.length===0){
@@ -5466,6 +5220,7 @@
           setTaskTextCommit(task, taskDetailText.textContent, ts, clientId);
           lastValidTaskText = task.text;
         }
+        if(shopping) shopping.prepare(list);
         touchListMeta(list, ts, clientId);
         enqueueSyncOperation(list, buildTaskFieldPatch(list, task, 'text'), [
           { kind:'task_text', taskId: task.id, at: task.textUpdatedAt, by: task.textUpdatedBy }
@@ -5557,6 +5312,7 @@
             if(code.length===6){ await window.firebaseDeleteList(code); }
           }
         }catch(e){ }
+        if(list.householdId && shopping){ list.deletedAt=Date.now();list.deletedBy=clientId;shopping.store.queueList(list); }
         // exclusão local
         stopRealtimeForList(list.id);
         removeLocalOrderState(list && list.id);
@@ -6379,6 +6135,7 @@
           const list = lists.find((entry)=> entry && entry.id===currentListId);
           if(!list){ return; }
           destroyTaskSortables();
+          if(shopping?.isLocked(list)) return;
           const commonConfig = {
             animation: 160,
             delay: 180,
@@ -6391,6 +6148,13 @@
             dragClass: 'sortable-drag'
           };
 
+          if(list.kind && shopping?.mode(list)==='categories'){
+            tasksContainer.querySelectorAll('.shopping-category-items').forEach(container=>{
+              if(container.children.length<2)return;
+              groupSortables.push(new Sortable(container,{...commonConfig,draggable:'.task',onStart:()=>{shopping.dragging=true;},onEnd:()=>{shopping.dragging=false;rebuildRenderedTaskOrderFromDom(list);}}));
+            });
+            return;
+          }
           if(tasksContainer && tasksContainer.querySelectorAll('.task').length > 1){
             activeSortable = new Sortable(tasksContainer, {
               ...commonConfig,
@@ -6447,6 +6211,36 @@
       // initial load
       loadThemePreference();
       loadState();
+      shopping = new window.ShoppingUI({
+        clientId, lists:()=>lists, save:saveState, toast:(message)=>showToast(message), openList,
+        hasManualGroups:id=>Object.keys(loadLocalGroups(id)).length>0,
+        refresh:()=>{renderLists();if(currentListId && lists.some(l=>l.id===currentListId))renderTasks();},
+        refreshQuick:()=>{if(screenQuickList.classList.contains('active'))renderQuickList();},
+        quickItems:buildQuickListItems, clearDraft:resetQuickListBuilder,
+        receiveHousehold:(incoming,householdId,scopeChanged)=>{
+          if(scopeChanged)destroyTaskSortables();
+          const oldActive=currentListId;
+          const local=lists.filter(l=>!l.householdId);
+          const previous=new Map(lists.filter(l=>l.householdId===householdId).map(l=>[l.id,l]));
+          lists=local.concat(incoming.map(remote=>{
+            const prev=previous.get(remote.id);
+            if(prev){const organization=prev.organization;const ordered=sortTasksForDisplay(prev,remote.tasks||[]);Object.assign(prev,remote);prev.tasks=ordered;prev.organization=organization||remote.organization;return prev;}
+            ensureListStructure(remote);return remote;
+          }));
+          if(oldActive && !lists.some(l=>l.id===oldActive)){ currentListId=null;currentTaskId=null;taskDetailText.textContent='';hideComposer();showScreen(screenLists); }
+        },
+        addItem:(list,item)=>{
+          const ts=nowTs(),text=ShoppingCore.itemText(item);
+          const task={id:createTaskId(),text,done:false,photos:[],createdAt:ts,shopping:{...item,sourceText:ShoppingCore.normalize(ShoppingCore.baseName(text))},shoppingUpdatedAt:ts,shoppingUpdatedBy:clientId};
+          ensureTaskStructure(task,clientId);list.tasks.push(task);touchListMeta(list,ts,clientId);
+          enqueueSyncOperation(list,Object.assign({},buildMetaPatch(list,false),buildTaskRecordPatch(task)),[{kind:'task_create',taskId:task.id,at:task.updatedAt,by:task.updatedBy}]);requestSync(list.id);
+        },
+        selectQuick:(kind,item)=>{
+          const template=getQuickTemplateById(kind);
+          for(const group of template.groups){const product=group.items.find(p=>p.id===item.productKey);if(product){const state=getQuickItemState(kind,group.id,product);state.selected=true;state.quantity=clampQuickItemQuantity(product,item.quantity||1);return;}}
+          shopping.quickExtras[kind]=shopping.quickExtras[kind]||[];shopping.quickExtras[kind].push({...item,text:ShoppingCore.itemText(item)});
+        }
+      });
       loadPhotoSyncState();
       loadCompletedCollapseState();
       loadLocalOrderState();

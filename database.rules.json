@@ -114,6 +114,95 @@
           ".validate": false
         }
       }
+    },
+    "households": {
+      "$householdId": {
+        ".read": "auth != null && root.child('householdAccess').child($householdId).child(auth.uid).val() == true",
+        "records": {
+          "$listId": {
+            ".write": "auth != null && root.child('householdAccess').child($householdId).child(auth.uid).val() == true && newData.exists() && $listId.matches(/^[a-zA-Z0-9_-]{1,120}$/)",
+            ".validate": "newData.hasChildren(['list','revision']) && newData.child('closedAt').exists() == newData.child('purchase').exists() && (!data.child('closedAt').exists() || newData.child('closedAt').val() == data.child('closedAt').val()) && (!data.child('deletedAt').exists() || (newData.child('deletedAt').val() == data.child('deletedAt').val() && newData.child('list').val() == data.child('list').val())) && (!newData.child('purchase').exists() || data.exists()) && (!newData.child('closedAt').exists() || newData.child('list').val() == data.child('list').val())",
+            "list": {
+              ".validate": "newData.isString() && newData.val().length <= 7000000 && (!data.parent().child('closedAt').exists() || newData.val() == data.val())"
+            },
+            "revision": {
+              ".validate": "newData.isNumber() && ((!data.exists() && newData.val() == 1) || newData.val() == data.val() + 1)"
+            },
+            "closedAt": {
+              ".validate": "data.exists() ? newData.val() == data.val() : (newData.isNumber() && newData.val() > 0 && newData.val() <= now + 300000)"
+            },
+            "deletedAt": {
+              ".validate": "data.exists() ? newData.val() == data.val() : (newData.isNumber() && newData.val() > 0 && newData.val() <= now + 300000)"
+            },
+            "deletedBy": {
+              ".validate": "newData.isString() && newData.val().length <= 128"
+            },
+            "purchase": {
+              ".validate": "newData.hasChildren(['data','revision','mode','occurredAt']) && (!data.child('deletedAt').exists() || newData.child('deletedAt').val() == data.child('deletedAt').val()) && ((!data.exists() && newData.child('revision').val() == 1) || (newData.child('revision').val() == data.child('revision').val() + 1) || (newData.child('revision').val() == data.child('revision').val() && newData.child('data').val() == data.child('data').val() && newData.child('mode').val() == data.child('mode').val() && newData.child('occurredAt').val() == data.child('occurredAt').val() && newData.child('deletedAt').val() == data.child('deletedAt').val()))",
+              "data": {
+                ".validate": "newData.isString() && newData.val().length <= 1500000"
+              },
+              "revision": {
+                ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() % 1 == 0"
+              },
+              "mode": {
+                ".validate": "newData.val() == 'complete' || newData.val() == 'quick'"
+              },
+              "occurredAt": {
+                ".validate": "newData.val() == data.val() || (newData.isNumber() && newData.val() > 0 && newData.val() <= now + 300000)"
+              },
+              "deletedAt": {
+                ".validate": "data.exists() ? newData.val() == data.val() : (newData.isNumber() && newData.val() > 0 && newData.val() <= now + 300000)"
+              },
+              "$other": {
+                ".validate": false
+              }
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "preferences": {
+          "$key": {
+            ".write": "auth != null && root.child('householdAccess').child($householdId).child(auth.uid).val() == true && newData.exists() && $key.matches(/^[a-zA-Z0-9_-]{1,120}$/)",
+            ".validate": "newData.hasChildren(['updatedAt','updatedBy']) && newData.child('updatedBy').val() == auth.uid && (!data.exists() || newData.child('updatedAt').val() >= data.child('updatedAt').val())",
+            "updatedAt": {
+              ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= now + 300000"
+            },
+            "updatedBy": {
+              ".validate": "newData.isString() && newData.val() == auth.uid"
+            },
+            "categoryId": {
+              ".validate": "newData.isString() && newData.val().matches(/^[a-zA-Z0-9_-]{1,120}$/)"
+            },
+            "blocked": {
+              ".validate": "newData.isBoolean()"
+            },
+            "jevEnabled": {
+              ".validate": "$key == '_settings' && newData.isBoolean()"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "$other": {
+          ".write": false
+        }
+      }
+    },
+    "householdUsers": {
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid",
+        ".write": false
+      }
+    },
+    "householdAccess": {
+      "$householdId": {
+        ".read": "auth != null && data.child(auth.uid).val() == true",
+        ".write": false
+      }
     }
   }
 }

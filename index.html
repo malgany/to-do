@@ -26,7 +26,7 @@
       }catch(_){ }
     })();
   </script>
-  <link rel="stylesheet" href="style.css?v=1.3.1" />
+  <link rel="stylesheet" href="style.css?v=1.4.0" />
   <!-- Google tag (gtag.js) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-E132M7DYY4"></script>
   <script>
@@ -335,7 +335,7 @@
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
     import { initializeAppCheck, ReCaptchaV3Provider } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app-check.js';
-    import { getDatabase, ref, set, get, child, remove, onValue, off, update } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
+    import { getDatabase, ref, set, get, child, remove, onValue, off, update, connectDatabaseEmulator } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
 
     const firebaseConfig = {
       apiKey: "AIzaSyBH0WJNRyphdJQ1ydwgh1GYLnOS00wt4oM",
@@ -348,9 +348,13 @@
       measurementId: "G-E132M7DYY4"
     };
 
+    const useFirebaseEmulators = ['localhost','127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).has('emulators');
+    if(useFirebaseEmulators) Object.assign(firebaseConfig,{apiKey:'fake-key',projectId:'demo-todo',authDomain:'demo-todo.firebaseapp.com',databaseURL:'https://demo-todo-default-rtdb.firebaseio.com'});
     const firebaseApp = initializeApp(firebaseConfig);
+    window.todoFirebaseEmulators = useFirebaseEmulators;
+    window.todoFirebaseApp = firebaseApp;
     try{
-      initializeAppCheck(firebaseApp, {
+      if(!useFirebaseEmulators) initializeAppCheck(firebaseApp, {
         provider: new ReCaptchaV3Provider('6LfoGtUrAAAAAI_hvP9snJSkpCkBjrGgHHWbxcup'),
         isTokenAutoRefreshEnabled: true,
       });
@@ -358,6 +362,7 @@
       console.warn('[firebase] App Check unavailable, continuing without it.', error);
     }
     const firebaseDb = getDatabase(firebaseApp);
+    if(useFirebaseEmulators) connectDatabaseEmulator(firebaseDb,'127.0.0.1',9000);
 
     const MAX_SHARED_PHOTOS = 4;
     const MAX_SHARED_PHOTO_DATA_LENGTH = 400000; // ~400 KB
@@ -970,6 +975,14 @@
   </script>
   
   <script src="vendor/sortable.min.js?v=1.15.0"></script>
-  <script src="script.js?v=1.6.3"></script>
+  <script src="shopping-catalog.js?v=1"></script>
+  <script src="shopping-core.js?v=1"></script>
+  <script src="household-model.js?v=1"></script>
+  <script src="shopping-remote.js?v=1"></script>
+  <script src="shopping-config.js?v=1"></script>
+  <script src="shopping-store.js?v=1"></script>
+  <script src="shopping-ui.js?v=1"></script>
+  <script src="shopping-cloud.js?v=1"></script>
+  <script src="script.js?v=1.7.0"></script>
 </body>
 </html>

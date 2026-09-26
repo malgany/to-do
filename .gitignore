@@ -5,3 +5,14 @@
 /report
 /data
 .local-server*.log
+
+/functions/node_modules
+*-debug.log
+*-debug.*.log
+/functions/.env*
+!/functions/.env.example
+/functions/.secret.local
+/test-results
+/jev-worker/.dev.vars*
+/jev-worker/.env*
+/jev-worker/.wrangler/
