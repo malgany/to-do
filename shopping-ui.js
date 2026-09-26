@@ -46,8 +46,6 @@
       tabs.append(tab('local','Local',localCount),tab('household','Nossa casa',houseCount));
       const utilities=node('div',undefined,'shopping-home-utilities');
       utilities.append(node('p',this.homeScope==='household'?'Compartilhadas entre vocês':'Salvas somente neste aparelho','shopping-scope-description'));
-      utilities.append(button('Histórico',()=>this.openHistory(),'shopping-utility-button'));
-      if(this.store.uid)utilities.append(button('Ajustes',()=>this.openHome(),'shopping-utility-button'));
       this.homeBar.append(tabs,utilities);
       const pending=this.store.pendingCount();
       if(pending || this.store.error)this.homeBar.append(node('small',this.store.error || `${pending} alterações aguardando sincronização`,'shopping-sync-status'));
@@ -65,7 +63,7 @@
       const content=node('div',undefined,'shopping-dialog-body');this.dialog.append(content);render(content);if(!this.dialog.open)this.dialog.showModal();
     }
     openHome(){
-      this.open('Compras em casa',body=>{
+      this.open('Ajustes',body=>{
         body.append(node('p',this.store.householdId?'Listas, compras e preferências compartilhadas entre vocês.':'Entre com Google para compartilhar compras e recuperar seu histórico em outro aparelho. As listas locais continuam disponíveis.'));
         if(!this.store.cloud){body.append(node('p','O acesso à conta está carregando ou indisponível. As compras locais continuam funcionando.'));return;}
         if(!this.store.uid){body.append(button('Entrar com Google',()=>this.run(async()=>{await this.store.cloud.signIn();this.openHome();}),'btn primary'));return;}
@@ -80,7 +78,7 @@
         }
         const blocked=Object.entries(this.store.data.preferences).filter(([,p])=>p.blocked);
         if(blocked.length){body.append(node('h3','Itens que você ocultou'));for(const [key] of blocked){const name=this.products.find(p=>p.productKey===key)?.name || this.store.history().flatMap(p=>p.items).find(i=>i.productKey===key)?.name || 'Produto';body.append(button('Voltar a sugerir '+name,()=>{this.store.preference(key,{blocked:false});this.openHome();}));}}
-        body.append(button('Sair da conta',()=>this.run(async()=>{if(this.store.pendingCount())throw new Error('Sincronize as alterações pendentes antes de sair.');await this.store.cloud.signOut();this.dialog.close();})));
+        body.append(button('Sair da conta Google',()=>this.run(async()=>{if(this.store.pendingCount())throw new Error('Sincronize as alterações pendentes antes de sair.');await this.store.whenSaved();await this.store.cloud.signOut();this.dialog.close();})));
       });
     }
     isLocked(list){return !!(list?.closedAt || list?.pendingFinish || this.store.data.pendingFinishes[list?.id]);}

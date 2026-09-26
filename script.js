@@ -304,6 +304,8 @@
       const appSubtitle = el('appSubtitle');
       const appMenuBtn = el('appMenuBtn');
       const appMenu = el('appMenu');
+      const shoppingHistoryAction = el('shoppingHistoryAction');
+      const shoppingSettingsAction = el('shoppingSettingsAction');
       const selectTasksAction = el('selectTasksAction');
       const themeToggleAction = el('themeToggleAction');
       const shareListAction = el('shareListAction');
@@ -666,16 +668,15 @@
         }
         exitPromptOpen = true;
         const shouldExit = await showConfirmDialog({
-          title: 'Sair do aplicativo',
-          message: 'Gostaria de sair?',
-          confirmText: 'Sair',
+          title: 'Fechar aplicativo',
+          message: 'Deseja fechar o aplicativo? Sua conta Google continuará conectada.',
+          confirmText: 'Fechar',
           cancelText: 'Cancelar'
         });
         exitPromptOpen = false;
         if(shouldExit){
-          ignoreNextPopState = true;
-          try{ window.close(); }catch(_){ }
-          try{ window.history.back(); }catch(_){ }
+          restoreRootGuard();
+          exitInstalledApp();
         } else {
           restoreRootGuard();
         }
@@ -1413,7 +1414,7 @@
       }
 
       function getFirstVisibleMenuItem(){
-        return [selectTasksAction, themeToggleAction, shareListAction, resetAppAction, exitAppAction, deleteListAction]
+        return [shoppingHistoryAction, shoppingSettingsAction, selectTasksAction, themeToggleAction, shareListAction, resetAppAction, exitAppAction, deleteListAction]
           .find((item)=> item && !item.hidden && item.style.display !== 'none' && !item.disabled);
       }
 
@@ -1421,6 +1422,9 @@
         hideAppMenu();
         const isListsScreen = activeScreen === screenLists;
         const isListDetailScreen = activeScreen === screenListDetail;
+
+        setMenuItemVisible(shoppingHistoryAction, isListsScreen || isListDetailScreen);
+        setMenuItemVisible(shoppingSettingsAction, isListsScreen || isListDetailScreen);
 
         setMenuItemVisible(selectTasksAction, isListDetailScreen);
         setMenuItemVisible(themeToggleAction, isListsScreen);
@@ -2941,11 +2945,7 @@
         setTimeout(()=>{
           try{
             if(document.visibilityState === 'hidden'){ return; }
-            if(window.history && window.history.length > 1){
-              window.history.back();
-              return;
-            }
-            showToast('Use o gesto ou botão do sistema para sair.', { type: 'success' });
+            showToast('Para fechar, use os aplicativos recentes do celular ou feche esta aba. Sua conta Google continua conectada.');
           }catch(_){ }
         }, 220);
       }
@@ -5381,6 +5381,8 @@
       });
 
       appMenuBtn.addEventListener('click', toggleAppMenu);
+      shoppingHistoryAction.addEventListener('click', ()=>{hideAppMenu();shopping?.openHistory();});
+      shoppingSettingsAction.addEventListener('click', ()=>{hideAppMenu();shopping?.openHome();});
       if(selectTasksAction){
         selectTasksAction.addEventListener('click', ()=>{
           hideAppMenu();
