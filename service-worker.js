@@ -1,9 +1,9 @@
-const CACHE_NAME = 'todo-pwa-v51';
+const CACHE_NAME = 'todo-pwa-v52';
 const ASSETS = [
   './',
   './index.html',
-  './style.css?v=1.4.0',
-  './script.js?v=1.7.0',
+  './style.css?v=1.5.0',
+  './script.js?v=1.8.0',
   './vendor/sortable.min.js?v=1.15.0',
   './shopping-catalog.js?v=1',
   './shopping-core.js?v=1',
@@ -11,7 +11,7 @@ const ASSETS = [
   './shopping-remote.js?v=1',
   './shopping-config.js?v=1',
   './shopping-store.js?v=1',
-  './shopping-ui.js?v=1',
+  './shopping-ui.js?v=2',
   './shopping-cloud.js?v=1',
   './manifest.json?v=1.0.1',
   './assets/quick-lists/quick-market.jpg',

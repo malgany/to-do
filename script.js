@@ -3,6 +3,7 @@
       let shopping = null;
       let pendingQuickItems = [];
       let lists = []; // {id, title, tasks: [{id,text,done,photos:[], ...syncMeta}]} 
+      let homeListScope = 'local';
       let currentListId = null;
       let currentTaskId = null;
       let activeQuickTemplateId = null;
@@ -3832,18 +3833,22 @@
 
       function renderLists(){
         listsContainer.innerHTML='';
-        if(lists.length===0){
+        const visibleLists=lists.filter(l=>homeListScope==='household'?!!l.householdId:!l.householdId);
+        if(visibleLists.length===0){
+          const emptyTitle=noLists.querySelector('.empty-title'),emptyDescription=noLists.querySelector('.empty-description');
+          if(emptyTitle)emptyTitle.textContent=homeListScope==='household'?'Nossa casa está vazia':'Nenhuma lista local';
+          if(emptyDescription)emptyDescription.textContent=homeListScope==='household'?'Crie uma lista para compartilhar entre vocês.':'Crie uma lista que ficará somente neste aparelho.';
           listsContainer.appendChild(noLists);
           return;
         }
         const heading = document.createElement('h2');
         heading.className = 'lists-heading';
-        heading.textContent = 'Minhas listas';
+        heading.textContent = homeListScope==='household'?'Listas compartilhadas':'Listas locais';
         listsContainer.appendChild(heading);
 
         const todayKey = getLocalDateKey(nowTs());
         let currentDateKey = '';
-        lists.slice().sort(compareListsByCreation).forEach((l)=>{
+        visibleLists.slice().sort(compareListsByCreation).forEach((l)=>{
           const createdAt = getListCreatedAt(l);
           const createdDateKey = getLocalDateKey(createdAt);
           if(createdDateKey !== currentDateKey){
@@ -6229,6 +6234,7 @@
           }));
           if(oldActive && !lists.some(l=>l.id===oldActive)){ currentListId=null;currentTaskId=null;taskDetailText.textContent='';hideComposer();showScreen(screenLists); }
         },
+        setHomeScope:(scope)=>{homeListScope=scope==='household'?'household':'local';renderLists();},
         addItem:(list,item)=>{
           const ts=nowTs(),text=ShoppingCore.itemText(item);
           const task={id:createTaskId(),text,done:false,photos:[],createdAt:ts,shopping:{...item,sourceText:ShoppingCore.normalize(ShoppingCore.baseName(text))},shoppingUpdatedAt:ts,shoppingUpdatedBy:clientId};

@@ -1,8 +1,21 @@
 /* Design tokens */
 /* Shopping controls share the existing color and spacing tokens. */
-.shopping-home-bar,.shopping-tools,.shopping-quick-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 16px}
-.shopping-home-bar{padding:0 4px;margin-top:8px}
+.shopping-home-bar,.shopping-quick-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 16px}
+.shopping-home-bar{display:flex;flex-direction:column;align-items:stretch;padding:0 4px;margin-top:8px;gap:10px}
+.shopping-scope-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;border:1px solid var(--border);border-radius:16px;background:var(--bg-canvas)}
+.shopping-scope-tab{display:flex;align-items:center;justify-content:center;gap:8px;min-width:0;min-height:44px;padding:0 12px;border:0;border-radius:12px;background:transparent;color:var(--muted);font:inherit;font-weight:700;cursor:pointer;transition:background var(--transition-fast),color var(--transition-fast),box-shadow var(--transition-fast)}
+.shopping-scope-tab.active{background:var(--card);color:var(--text);box-shadow:var(--shadow-sm)}
+.shopping-scope-count{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 7px;border-radius:999px;background:var(--border);color:var(--muted);font-size:12px;line-height:1}
+.shopping-scope-tab.active .shopping-scope-count{background:var(--brand-50);color:var(--brand-700)}
+.shopping-home-utilities{display:flex;align-items:center;gap:6px;min-width:0}
+.shopping-scope-description{flex:1;min-width:0;color:var(--muted);font-size:12px;line-height:1.35}
+.shopping-utility-button{min-height:36px;padding:0 10px;border:0;border-radius:10px;background:transparent;color:var(--brand-700);font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.shopping-utility-button:hover{background:var(--brand-50)}
+.shopping-tools{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:center;gap:8px;margin:0 0 16px}
 .shopping-home-bar small,.shopping-tools small,.shopping-tools p{flex-basis:100%;font-size:13px;color:var(--muted)}
+.shopping-tools .shopping-organization-select,.shopping-tools .shopping-list-history,.shopping-tools .shopping-copy-house,.shopping-tools .shopping-sync-status{grid-column:1/-1;width:100%}
+.shopping-tools .shopping-suggestions,.shopping-tools .shopping-finish{width:100%;min-width:0;padding-inline:10px}
+.shopping-copy-house{border-style:dashed!important;color:var(--brand-700)!important;background:transparent!important}
 .shopping-tools select,.shopping-dialog select,.shopping-category-editor select,.shopping-kind-field select{min-height:44px;border:1px solid var(--border);border-radius:12px;background:var(--card);color:var(--text);padding:8px 12px;font:inherit;max-width:100%}
 .shopping-suggestions{color:var(--brand-700);background:var(--brand-50);border:1px solid var(--brand-100)}
 .shopping-category,.shopping-status-section{width:100%;min-width:0}
@@ -40,7 +53,7 @@
 .shopping-history-edit>span{min-width:0;overflow-wrap:anywhere}.shopping-history-edit select{max-width:48%}
 .shopping-dialog button:focus-visible,.shopping-tools :focus-visible,.shopping-home-bar :focus-visible{outline:3px solid var(--brand);outline-offset:3px}
 .shopping-dialog button:disabled{opacity:.5;cursor:default}
-@media(max-width:600px){.shopping-dialog{margin:auto 0 0;width:100%;max-height:90dvh;border-radius:24px 24px 0 0;border-bottom:0}.shopping-dialog-header{padding:16px}.shopping-dialog-body{padding:16px 16px max(20px,env(safe-area-inset-bottom))}.shopping-tools .btn,.shopping-tools select{font-size:13px}.shopping-tools{gap:8px}.shopping-dialog-footer{bottom:-16px}}
+@media(max-width:600px){.shopping-dialog{margin:auto 0 0;width:100%;max-height:90dvh;border-radius:24px 24px 0 0;border-bottom:0}.shopping-dialog-header{padding:16px}.shopping-dialog-body{padding:16px 16px max(20px,env(safe-area-inset-bottom))}.shopping-tools .btn,.shopping-tools select{font-size:13px}.shopping-tools{gap:8px}.shopping-dialog-footer{bottom:-16px}.shopping-scope-description{font-size:11px}.shopping-utility-button{padding-inline:8px}}
 :root{
   color-scheme:light;
   --bg-canvas:#F3F4F6;

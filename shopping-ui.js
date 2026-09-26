@@ -7,7 +7,7 @@
   const dateValue=time=>{const d=new Date(time);return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);};
   class ShoppingUI {
     constructor(bridge){
-      this.b=bridge;this.products=C.catalog(root.ShoppingCatalog);this.quickExtras={};this.classifying=new Set();this.dragging=false;this.retryAfter=new Map();
+      this.b=bridge;this.products=C.catalog(root.ShoppingCatalog);this.quickExtras={};this.classifying=new Set();this.dragging=false;this.retryAfter=new Map();this.homeScope='local';
       this.store=new root.ShoppingStore(()=>this.changed());
       this.dialog=node('dialog',undefined,'shopping-dialog');this.dialog.setAttribute('aria-labelledby','shoppingDialogTitle');document.body.append(this.dialog);
       this.dialog.addEventListener('close',()=>this.returnFocus?.focus?.());
@@ -29,16 +29,34 @@
       this.lastScope=scope;
       const active=document.activeElement;
       if(!scopeChanged && (this.dragging || active?.id==='taskDetailText')) {clearTimeout(this.changeTimer);this.changeTimer=setTimeout(()=>this.changed(),350);return;}
+      if(scopeChanged){
+        let saved='';try{saved=localStorage.getItem('todo_home_scope_v1_'+(this.store.uid||'guest'))||'';}catch(_){}
+        this.homeScope=this.store.householdId?(saved==='local'||saved==='household'?saved:'household'):'local';
+      }else if(!this.store.householdId&&this.homeScope==='household')this.homeScope='local';
+      this.b.setHomeScope?.(this.homeScope);
       this.b.receiveHousehold(Object.values(this.store.data.lists).filter(l=>l.householdId===this.store.householdId&&!l.deletedAt),this.store.householdId,scopeChanged);
       if(scopeChanged)active?.blur?.();
       this.renderHome();this.b.refresh();
     }
     renderHome(){
       this.homeBar.replaceChildren();
-      this.homeBar.append(button(this.store.householdId?'Nossa casa':'Compras em casa',()=>this.openHome(),'btn shopping-home-button'));
-      this.homeBar.append(button('Histórico',()=>this.openHistory()));
+      const lists=this.b.lists().filter(l=>!l.deletedAt),localCount=lists.filter(l=>!l.householdId).length,houseCount=lists.filter(l=>l.householdId===this.store.householdId).length;
+      const tabs=node('div',undefined,'shopping-scope-tabs');tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','Origem das listas');
+      const tab=(scope,label,count)=>{const active=this.homeScope===scope,b=button('',()=>this.setHomeScope(scope),'shopping-scope-tab');b.setAttribute('role','tab');b.setAttribute('aria-selected',String(active));if(active)b.classList.add('active');b.append(node('span',label),node('span',String(count),'shopping-scope-count'));return b;};
+      tabs.append(tab('local','Local',localCount),tab('household','Nossa casa',houseCount));
+      const utilities=node('div',undefined,'shopping-home-utilities');
+      utilities.append(node('p',this.homeScope==='household'?'Compartilhadas entre vocês':'Salvas somente neste aparelho','shopping-scope-description'));
+      utilities.append(button('Histórico',()=>this.openHistory(),'shopping-utility-button'));
+      if(this.store.uid)utilities.append(button('Ajustes',()=>this.openHome(),'shopping-utility-button'));
+      this.homeBar.append(tabs,utilities);
       const pending=this.store.pendingCount();
       if(pending || this.store.error)this.homeBar.append(node('small',this.store.error || `${pending} alterações aguardando sincronização`,'shopping-sync-status'));
+    }
+    setHomeScope(scope){
+      if(scope==='household'&&!this.store.householdId){this.openHome();return;}
+      this.homeScope=scope==='household'?'household':'local';
+      try{localStorage.setItem('todo_home_scope_v1_'+(this.store.uid||'guest'),this.homeScope);}catch(_){}
+      this.b.setHomeScope?.(this.homeScope);this.renderHome();this.b.refresh();
     }
     async run(fn){try{await fn();}catch(e){this.b.toast(e.message || 'Não foi possível concluir esta ação.');}}
     open(title,render){
@@ -68,8 +86,10 @@
     isLocked(list){return !!(list?.closedAt || list?.pendingFinish || this.store.data.pendingFinishes[list?.id]);}
     guard(list){if(this.isLocked(list)){this.b.toast('Compra encerrada ou aguardando sincronização. Use o histórico para corrigir o registro.');return true;}return false;}
     attachList(list,kind){
+      const toHouse=this.homeScope==='household'&&!!this.store.householdId;
+      if(toHouse&&!kind)kind='mercado';
       if(!kind)return;list.kind=kind;list.purchaseId=list.id;
-      if(this.store.householdId)list.householdId=this.store.householdId;
+      if(toHouse)list.householdId=this.store.householdId;
       list.organization='categories';this.prepare(list);
     }
     prepare(list){
@@ -87,19 +107,19 @@
     onMutation(list){if(!list)return;this.prepare(list);if(list.householdId)this.store.queueList(list);}
     save(lists){this.store.cacheLists(lists);}
     mode(list){return this.store.data.viewModes?.[list.id] || list.organization || (this.b.hasManualGroups(list.id)?'manual':'categories');}
-    setCreationMode(mode,kind){this.kindField.hidden=mode!=='create';this.kindSelect.value=kind||'';}
+    setCreationMode(mode,kind){const toHouse=this.homeScope==='household'&&!!this.store.householdId;this.kindField.hidden=mode!=='create';this.kindSelect.options[0].disabled=toHouse;this.kindSelect.value=kind||(toHouse?'mercado':'');}
     renderBar(list){
       this.bar.replaceChildren();if(!list?.kind){
         if(list)this.bar.append(button('Organizar como compra',()=>this.chooseKind(list)));return;
       }
-      const mode=select([['categories','Por categorias'],['manual','Manual']],this.mode(list),'Organização da lista');mode.addEventListener('change',()=>{list.organization=mode.value;this.store.data.viewModes={...(this.store.data.viewModes||{}),[list.id]:mode.value};this.store.persist();this.b.save();this.b.refresh();});this.bar.append(mode);
+      const mode=select([['categories','Por categorias'],['manual','Manual']],this.mode(list),'Organização da lista');mode.classList.add('shopping-organization-select');mode.addEventListener('change',()=>{list.organization=mode.value;this.store.data.viewModes={...(this.store.data.viewModes||{}),[list.id]:mode.value};this.store.persist();this.b.save();this.b.refresh();});this.bar.append(mode);
       if(this.isLocked(list)){
-        this.bar.append(button(list.closedAt?'Compra encerrada · Ver histórico':'Aguardando sincronização',()=>this.openHistory()));
+        this.bar.append(button(list.closedAt?'Compra encerrada · Ver histórico':'Aguardando sincronização',()=>this.openHistory(),'btn shopping-list-history'));
       }else{
         const suggestions=this.getSuggestions(list.kind,list.id,this.items(list));
-        this.bar.append(button(`Sugestões · ${suggestions.length}`,()=>this.openSuggestions(list.kind,list.id),'btn shopping-suggestions'),button('Finalizar compra',()=>this.openFinish(list),'btn primary'));
+        this.bar.append(button(`Sugestões · ${suggestions.length}`,()=>this.openSuggestions(list.kind,list.id),'btn shopping-suggestions'),button('Finalizar compra',()=>this.openFinish(list),'btn primary shopping-finish'));
       }
-      if(!list.householdId && this.store.householdId)this.bar.append(button('Copiar para nossa casa',()=>this.copyToHousehold(list)));
+      if(!list.householdId && this.store.householdId)this.bar.append(button('Copiar para nossa casa',()=>this.copyToHousehold(list),'btn shopping-copy-house'));
       if(list.finishConflict)this.bar.append(node('p','A lista mudou em outro aparelho. Revise os itens antes de finalizar novamente.','shopping-sync-status'));
       if(list.householdId && (this.store.pendingCount() || this.store.error))this.bar.append(node('small',this.store.error||'Aguardando sincronização','shopping-sync-status'));
       this.classify(list);
@@ -111,10 +131,10 @@
     copyToHousehold(list){
       const clone=JSON.parse(JSON.stringify(list));const id=list.shareCode?'legacy_'+list.shareCode:'import_'+list.id;
       const existing=this.b.lists().find(l=>l.householdId===this.store.householdId&&l.id===id);
-      if(existing){this.b.openList(id);return;}
+      if(existing){this.setHomeScope('household');this.b.openList(id);return;}
       clone.id=id;clone.purchaseId=id;clone.sourceRef=list.shareCode?'legacy_'+list.shareCode:list.id;clone.householdId=this.store.householdId;
       delete clone.shareCode;delete clone.imported;delete clone.closedAt;delete clone.pendingFinish;clone.shareCreated=false;
-      this.b.lists().push(clone);this.store.queueList(clone);this.b.save();this.b.openList(id);this.b.toast('Cópia criada em nossa casa. A lista antiga continua independente.');
+      this.b.lists().push(clone);this.store.queueList(clone);this.b.save();this.setHomeScope('household');this.b.openList(id);this.b.toast('Cópia criada em nossa casa. A lista antiga continua independente.');
     }
     items(list){return (list.tasks||[]).filter(t=>!t.deletedAt).map(t=>t.shopping||{productKey:C.keyFor(t.text)});}
     getSuggestions(kind,scope,items){return C.suggestions({history:this.store.history(),kind,currentItems:items,otherLists:this.b.lists().filter(l=>l.id!==scope),preferences:this.store.data.preferences,dismissed:this.store.data.dismissed[scope]||[]});}
@@ -173,7 +193,7 @@
     openHistory(){this.open('Histórico de compras',body=>{
       const history=this.store.history().filter(p=>!p.deletedAt).sort((a,b)=>b.occurredAt-a.occurredAt);
       if(!history.length)body.append(node('p','Nenhuma compra registrada. Use “Finalizar compra” em uma lista de Mercado, Farmácia ou Pet. Para registrar uma lista antiga, abra-a e escolha “Organizar como compra”.'));
-      for(const p of history){const count=p.items.filter(i=>i.outcome==='bought').length;const row=button('',()=>this.editPurchase(p),'shopping-history-row');row.append(node('strong',p.title),node('small',`${new Date(p.occurredAt).toLocaleString('pt-BR')} · ${C.kinds[p.kind]} · ${p.mode==='quick'?'Reposição rápida':'Compra completa'}`),node('span',`${count} ${count===1?'item comprado':'itens comprados'}`));body.append(row);}
+      for(const p of history){const count=p.items.filter(i=>i.outcome==='bought').length,source=p.localOnly?'Neste aparelho':'Nossa casa';const row=button('',()=>this.editPurchase(p),'shopping-history-row');row.append(node('strong',p.title),node('small',`${source} · ${new Date(p.occurredAt).toLocaleString('pt-BR')} · ${C.kinds[p.kind]} · ${p.mode==='quick'?'Reposição rápida':'Compra completa'}`),node('span',`${count} ${count===1?'item comprado':'itens comprados'}`));body.append(row);}
     });}
     editPurchase(p){this.open('Revisar compra',body=>{
       body.append(node('p',p.title));const mode=select([['complete','Compra completa'],['quick','Reposição rápida']],p.mode,'Modalidade');const date=node('input');date.type='datetime-local';date.value=dateValue(p.occurredAt);date.setAttribute('aria-label','Data da compra');body.append(mode,date);
