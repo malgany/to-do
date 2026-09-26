@@ -13,7 +13,7 @@
 .shopping-utility-button:hover{background:var(--brand-50)}
 .shopping-tools{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:center;gap:8px;margin:0 0 16px}
 .shopping-home-bar small,.shopping-tools small,.shopping-tools p{flex-basis:100%;font-size:13px;color:var(--muted)}
-.shopping-tools .shopping-organization-select,.shopping-tools .shopping-list-history,.shopping-tools .shopping-copy-house,.shopping-tools .shopping-sync-status{grid-column:1/-1;width:100%}
+.shopping-tools .shopping-organization-select,.shopping-tools .shopping-copy-house,.shopping-tools .shopping-sync-status{grid-column:1/-1;width:100%}
 .shopping-tools .shopping-suggestions,.shopping-tools .shopping-finish{width:100%;min-width:0;padding-inline:10px}
 .shopping-copy-house{border-style:dashed!important;color:var(--brand-700)!important;background:transparent!important}
 .shopping-tools select,.shopping-dialog select,.shopping-category-editor select,.shopping-kind-field select{min-height:44px;border:1px solid var(--border);border-radius:12px;background:var(--card);color:var(--text);padding:8px 12px;font:inherit;max-width:100%}

@@ -114,7 +114,7 @@
       }
       const mode=select([['categories','Por categorias'],['manual','Manual']],this.mode(list),'Organização da lista');mode.classList.add('shopping-organization-select');mode.addEventListener('change',()=>{list.organization=mode.value;this.store.data.viewModes={...(this.store.data.viewModes||{}),[list.id]:mode.value};this.store.persist();this.b.save();this.b.refresh();});this.bar.append(mode);
       if(this.isLocked(list)){
-        this.bar.append(button(list.closedAt?'Compra encerrada · Ver histórico':'Aguardando sincronização',()=>this.openHistory(),'btn shopping-list-history'));
+        if(!list.closedAt)this.bar.append(node('small','Aguardando sincronização','shopping-sync-status'));
       }else{
         const suggestions=this.getSuggestions(list.kind,list.id,this.items(list));
         this.bar.append(button(`Sugestões · ${suggestions.length}`,()=>this.openSuggestions(list.kind,list.id),'btn shopping-suggestions'),button('Finalizar compra',()=>this.openFinish(list),'btn primary shopping-finish'));
