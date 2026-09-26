@@ -119,7 +119,11 @@
         const suggestions=this.getSuggestions(list.kind,list.id,this.items(list));
         this.bar.append(button(`Sugestões · ${suggestions.length}`,()=>this.openSuggestions(list.kind,list.id),'btn shopping-suggestions'),button('Finalizar compra',()=>this.openFinish(list),'btn primary shopping-finish'));
       }
-      if(!list.householdId && this.store.householdId)this.bar.append(button('Copiar para nossa casa',()=>this.copyToHousehold(list),'btn shopping-copy-house'));
+      if(!list.householdId && this.store.householdId){
+        const copy=this.householdCopy(list),pending=copy&&!!this.store.data.pendingLists[copy.id];
+        this.bar.append(button(copy?(pending?'Cópia aguardando sincronização':'Abrir cópia em Nossa casa'):'Copiar para nossa casa',()=>this.run(()=>this.copyToHousehold(list)),'btn shopping-copy-house'));
+        if(copy)this.bar.append(node('small',pending?(this.store.error||'A cópia está salva neste aparelho e será enviada quando houver conexão.'):'Esta lista já foi copiada. A versão local e a compartilhada são independentes.','shopping-sync-status'));
+      }
       if(list.finishConflict)this.bar.append(node('p','A lista mudou em outro aparelho. Revise os itens antes de finalizar novamente.','shopping-sync-status'));
       if(list.householdId && (this.store.pendingCount() || this.store.error))this.bar.append(node('small',this.store.error||'Aguardando sincronização','shopping-sync-status'));
       this.classify(list);
@@ -128,13 +132,40 @@
       body.append(node('p','Escolha o tipo. As marcações atuais serão preservadas.'));
       const kind=select(Object.entries(C.kinds),'mercado','Tipo de compra');body.append(kind,button('Aplicar',()=>{list.kind=kind.value;list.purchaseId=list.shareCode?'legacy_'+list.shareCode:list.id;list.sourceRef=list.shareCode?'legacy_'+list.shareCode:list.id;this.prepare(list);this.b.save();this.dialog.close();this.b.refresh();},'btn primary'));
     });}
+    householdCopy(list){
+      const sourceRef=list.shareCode?'legacy_'+list.shareCode:list.id,originalId=list.shareCode?sourceRef:'import_'+list.id;
+      return Object.values(this.store.data.lists).find(l=>l.householdId===this.store.householdId&&!l.deletedAt&&(l.sourceRef===sourceRef||l.id===originalId));
+    }
     copyToHousehold(list){
-      const clone=JSON.parse(JSON.stringify(list));const id=list.shareCode?'legacy_'+list.shareCode:'import_'+list.id;
-      const existing=this.b.lists().find(l=>l.householdId===this.store.householdId&&l.id===id);
-      if(existing){this.setHomeScope('household');this.b.openList(id);return;}
-      clone.id=id;clone.purchaseId=id;clone.sourceRef=list.shareCode?'legacy_'+list.shareCode:list.id;clone.householdId=this.store.householdId;
-      delete clone.shareCode;delete clone.imported;delete clone.closedAt;delete clone.pendingFinish;clone.shareCreated=false;
-      this.b.lists().push(clone);this.store.queueList(clone);this.b.save();this.setHomeScope('household');this.b.openList(id);this.b.toast('Cópia criada em nossa casa. A lista antiga continua independente.');
+      if(!this.store.householdId)throw new Error('Entre na sua conta para copiar para Nossa casa.');
+      const existing=this.householdCopy(list);
+      if(existing){
+        if(this.store.data.pendingLists[existing.id]){
+          const retry=JSON.parse(JSON.stringify(existing));
+          this.prepareCopyItems(retry);root.ShoppingRemote.validateList(retry,this.store.householdId);this.store.queueList(retry);
+          this.changed();
+        }
+        this.setHomeScope('household');this.b.openList(existing.id);return;
+      }
+      const clone=JSON.parse(JSON.stringify(list)),sourceRef=list.shareCode?'legacy_'+list.shareCode:list.id;
+      let id=list.shareCode?sourceRef:'import_'+list.id;
+      // Deleted records are immutable. A new copy must have a new identity.
+      if(this.store.data.lists[id])id='copy_'+crypto.randomUUID();
+      const now=Date.now();
+      Object.assign(clone,{id,purchaseId:id,sourceRef,householdId:this.store.householdId,createdAt:now,metaUpdatedAt:now,metaUpdatedBy:this.b.clientId,shareCreated:false});
+      for(const key of ['shareCode','imported','closedAt','pendingFinish','finishConflict','deletedAt','deletedBy','revision'])delete clone[key];
+      this.prepareCopyItems(clone);
+      root.ShoppingRemote.validateList(clone,this.store.householdId);
+      // Persist the outbox before exposing the copy in the UI.
+      this.store.queueList(clone);this.b.lists().push(clone);this.b.save();this.renderHome();this.b.refresh();
+      this.b.toast('Cópia salva neste aparelho e aguardando sincronização.');
+    }
+    prepareCopyItems(list){
+      for(const task of list.tasks||[]){
+        if(task.deletedAt)continue;
+        task.shopping=C.identify(task.text,list.kind,this.products,this.store.data.preferences,task.shopping);
+        task.shoppingUpdatedAt=Date.now();task.shoppingUpdatedBy=this.b.clientId;
+      }
     }
     items(list){return (list.tasks||[]).filter(t=>!t.deletedAt).map(t=>t.shopping||{productKey:C.keyFor(t.text)});}
     getSuggestions(kind,scope,items){return C.suggestions({history:this.store.history(),kind,currentItems:items,otherLists:this.b.lists().filter(l=>l.id!==scope),preferences:this.store.data.preferences,dismissed:this.store.data.dismissed[scope]||[]});}
