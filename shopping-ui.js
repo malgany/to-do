@@ -104,13 +104,12 @@
     }
     onMutation(list){if(!list)return;this.prepare(list);if(list.householdId)this.store.queueList(list);}
     save(lists){this.store.cacheLists(lists);}
-    mode(list){return this.store.data.viewModes?.[list.id] || list.organization || (this.b.hasManualGroups(list.id)?'manual':'categories');}
+    mode(){return 'categories';}
     setCreationMode(mode,kind){const toHouse=this.homeScope==='household'&&!!this.store.householdId;this.kindField.hidden=mode!=='create';this.kindSelect.options[0].disabled=toHouse;this.kindSelect.value=kind||(toHouse?'mercado':'');}
     renderBar(list){
       this.bar.replaceChildren();if(!list?.kind){
         if(list)this.bar.append(button('Organizar como compra',()=>this.chooseKind(list)));return;
       }
-      const mode=select([['categories','Por categorias'],['manual','Manual']],this.mode(list),'Organização da lista');mode.classList.add('shopping-organization-select');mode.addEventListener('change',()=>{list.organization=mode.value;this.store.data.viewModes={...(this.store.data.viewModes||{}),[list.id]:mode.value};this.store.persist();this.b.save();this.b.refresh();});this.bar.append(mode);
       if(this.isLocked(list)){
         if(!list.closedAt)this.bar.append(node('small','Aguardando sincronização','shopping-sync-status'));
       }else{
@@ -119,8 +118,11 @@
       }
       if(!list.householdId && this.store.householdId){
         const copy=this.householdCopy(list),pending=copy&&!!this.store.data.pendingLists[copy.id];
-        this.bar.append(button(copy?(pending?'Cópia aguardando sincronização':'Abrir cópia em Nossa casa'):'Copiar para nossa casa',()=>this.run(()=>this.copyToHousehold(list)),'btn shopping-copy-house'));
-        if(copy)this.bar.append(node('small',pending?(this.store.error||'A cópia está salva neste aparelho e será enviada quando houver conexão.'):'Esta lista já foi copiada. A versão local e a compartilhada são independentes.','shopping-sync-status'));
+        if(copy){
+          const notice=node('div',undefined,'shopping-copy-notice');
+          notice.append(node('strong',pending?'Cópia aguardando sincronização':'Lista copiada para Nossa casa'),node('small',pending?(this.store.error||'A cópia está salva neste aparelho e será enviada quando houver conexão.'):'A versão local e a compartilhada são independentes.'));
+          this.bar.append(notice);
+        }else this.bar.append(button('Copiar para nossa casa',()=>this.run(()=>this.copyToHousehold(list)),'btn shopping-copy-house'));
       }
       if(list.finishConflict)this.bar.append(node('p','A lista mudou em outro aparelho. Revise os itens antes de finalizar novamente.','shopping-sync-status'));
       if(list.householdId && (this.store.pendingCount() || this.store.error))this.bar.append(node('small',this.store.error||'Aguardando sincronização','shopping-sync-status'));
