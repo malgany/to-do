@@ -1,13 +1,13 @@
 // Firebase Spark: authenticated client transactions; no Cloud Functions or billing.
 (function(){
   'use strict';
+  let starting=false;
   async function start(){
-    if(window.ShoppingCloud||!window.todoFirebaseApp)return;
+    if(starting||window.ShoppingCloud||!window.firebaseReady||!window.todoFirebaseApp)return;
+    starting=true;
     const base='https://www.gstatic.com/firebasejs/10.14.1/';
     const [A,D]=await Promise.all([import(base+'firebase-auth.js'),import(base+'firebase-database.js')]);
     const auth=A.getAuth(window.todoFirebaseApp),db=D.getDatabase(window.todoFirebaseApp),R=window.ShoppingRemote;
-    const emulate=['localhost','127.0.0.1'].includes(location.hostname)&&new URLSearchParams(location.search).has('emulators');
-    if(emulate)A.connectAuthEmulator(auth,'http://127.0.0.1:9099',{disableWarnings:true});
     const error=(message,code)=>Object.assign(new Error(message),{code:'shopping/'+code});
     async function call(name,args){
       const user=auth.currentUser;if(!user)throw error('Entre com Google.','unauthenticated');
@@ -53,6 +53,7 @@
     };
     window.dispatchEvent(new Event('shopping-cloud-ready'));
   }
-  window.addEventListener('firebase-ready',()=>start().catch(()=>window.dispatchEvent(new Event('shopping-cloud-error'))));
-  start().catch(()=>window.dispatchEvent(new Event('shopping-cloud-error')));
+  const failed=()=>{starting=false;window.dispatchEvent(new Event('shopping-cloud-error'));};
+  window.addEventListener('firebase-ready',()=>start().catch(failed));
+  start().catch(failed);
 })();

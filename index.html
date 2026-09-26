@@ -334,6 +334,7 @@
 
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+    import { getAuth, connectAuthEmulator } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
     import { initializeAppCheck, ReCaptchaV3Provider } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app-check.js';
     import { getDatabase, ref, set, get, child, remove, onValue, off, update, connectDatabaseEmulator } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
 
@@ -353,6 +354,9 @@
     const firebaseApp = initializeApp(firebaseConfig);
     window.todoFirebaseEmulators = useFirebaseEmulators;
     window.todoFirebaseApp = firebaseApp;
+    // Register Auth before Database opens its connection or restores listeners.
+    const firebaseAuth = getAuth(firebaseApp);
+    if(useFirebaseEmulators) connectAuthEmulator(firebaseAuth,'http://127.0.0.1:9099',{disableWarnings:true});
     try{
       if(!useFirebaseEmulators) initializeAppCheck(firebaseApp, {
         provider: new ReCaptchaV3Provider('6LfoGtUrAAAAAI_hvP9snJSkpCkBjrGgHHWbxcup'),
@@ -361,6 +365,7 @@
     }catch(error){
       console.warn('[firebase] App Check unavailable, continuing without it.', error);
     }
+    await firebaseAuth.authStateReady();
     const firebaseDb = getDatabase(firebaseApp);
     if(useFirebaseEmulators) connectDatabaseEmulator(firebaseDb,'127.0.0.1',9000);
 

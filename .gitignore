@@ -1,6 +1,7 @@
 # Cursor IDE
 .cursor
 .agent
+.codex-remote-attachments/
 /node_modules
 /report
 /data
