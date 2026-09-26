@@ -136,14 +136,15 @@
       const sourceRef=list.shareCode?'legacy_'+list.shareCode:list.id,originalId=list.shareCode?sourceRef:'import_'+list.id;
       return Object.values(this.store.data.lists).find(l=>l.householdId===this.store.householdId&&!l.deletedAt&&(l.sourceRef===sourceRef||l.id===originalId));
     }
-    copyToHousehold(list){
+    async copyToHousehold(list){
       if(!this.store.householdId)throw new Error('Entre na sua conta para copiar para Nossa casa.');
+      const generation=this.store.generation;
       const existing=this.householdCopy(list);
       if(existing){
         if(this.store.data.pendingLists[existing.id]){
           const retry=JSON.parse(JSON.stringify(existing));
           this.prepareCopyItems(retry);root.ShoppingRemote.validateList(retry,this.store.householdId);this.store.queueList(retry);
-          this.changed();
+          await this.store.whenSaved();if(this.store.generation!==generation)return;this.changed();
         }
         this.setHomeScope('household');this.b.openList(existing.id);return;
       }
@@ -157,7 +158,11 @@
       this.prepareCopyItems(clone);
       root.ShoppingRemote.validateList(clone,this.store.householdId);
       // Persist the outbox before exposing the copy in the UI.
-      this.store.queueList(clone);this.b.lists().push(clone);this.b.save();this.renderHome();this.b.refresh();
+      this.store.queueList(clone);await this.store.whenSaved();
+      if(this.store.generation!==generation)return;
+      // A cloud notification may already have inserted the persisted copy.
+      if(!this.b.lists().some(l=>l.id===clone.id))this.b.lists().push(clone);
+      this.b.save();this.renderHome();this.b.refresh();
       this.b.toast('Cópia salva neste aparelho e aguardando sincronização.');
     }
     prepareCopyItems(list){

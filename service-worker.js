@@ -1,17 +1,18 @@
-const CACHE_NAME = 'todo-pwa-v54';
+const CACHE_NAME = 'todo-pwa-v55';
 const ASSETS = [
   './',
   './index.html',
   './style.css?v=1.5.0',
-  './script.js?v=1.8.0',
+  './script.js?v=1.8.1',
   './vendor/sortable.min.js?v=1.15.0',
   './shopping-catalog.js?v=1',
   './shopping-core.js?v=1',
   './household-model.js?v=1',
   './shopping-remote.js?v=1',
   './shopping-config.js?v=1',
-  './shopping-store.js?v=1',
-  './shopping-ui.js?v=4',
+  './shopping-storage.js?v=1',
+  './shopping-store.js?v=2',
+  './shopping-ui.js?v=5',
   './shopping-cloud.js?v=1',
   './manifest.json?v=1.0.1',
   './assets/quick-lists/quick-market.jpg',
@@ -46,7 +47,7 @@ self.addEventListener('fetch', (event) => {
   const isFreshAsset = request.mode === 'navigate' || ['.html', '.js', '.css'].some((ext) => url.pathname.endsWith(ext));
   if (isFreshAsset) {
     event.respondWith(
-      fetch(request).then((response) => {
+      fetch(request,{cache:'no-cache'}).then((response) => {
         const copy = response.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
         return response;

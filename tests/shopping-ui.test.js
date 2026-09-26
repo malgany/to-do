@@ -19,7 +19,7 @@ function copyHarness(records={}){
 }
 
 test('copying an old closed local purchase survives server validation and reload',async()=>{
-  const h=copyHarness();h.ui.copyToHousehold(h.local);await h.sync();
+  const h=copyHarness();await h.ui.copyToHousehold(h.local);await h.sync();
   assert.equal(h.store.pendingCount(),0,h.store.error);
   const copies=Object.values(h.reload().data.lists).filter(l=>!l.deletedAt);
   assert.equal(copies.length,1);assert.equal(copies[0].closedAt,undefined);
@@ -31,7 +31,7 @@ test('copying again after deleting a previous household copy does not reuse its 
   const previous={id:'import_local',purchaseId:'import_local',householdId:'home',sourceRef:'local',title:'Old',kind:'mercado',tasks:[],deletedAt:100,deletedBy:'user'};
   const record=R.mutate(null,'syncHouseholdList',{householdId:'home',list:previous});
   const h=copyHarness({import_local:record});h.local.closedAt=undefined;h.local.tasks=[];
-  h.ui.copyToHousehold(h.local);await h.sync();
+  await h.ui.copyToHousehold(h.local);await h.sync();
   const copies=Object.values(h.reload().data.lists).filter(l=>!l.deletedAt);
   assert.equal(copies.length,1);assert.notEqual(copies[0].id,'import_local');
   assert.equal(h.records.import_local.deletedAt,100);
@@ -39,16 +39,16 @@ test('copying again after deleting a previous household copy does not reuse its 
 
 test('repeat copy before and after sync opens the existing copy without duplicating it',async()=>{
   const h=copyHarness();h.local.tasks=[];delete h.local.closedAt;
-  h.ui.copyToHousehold(h.local);h.ui.copyToHousehold(h.local);
+  await h.ui.copyToHousehold(h.local);await h.ui.copyToHousehold(h.local);
   assert.equal(Object.keys(h.store.data.pendingLists).length,1);
-  await h.sync();h.ui.copyToHousehold(h.local);
+  await h.sync();await h.ui.copyToHousehold(h.local);
   assert.equal(Object.keys(h.store.data.lists).length,1);assert.equal(h.store.pendingCount(),0);
 });
 
 test('a pending legacy copy can be repaired and synced without creating another copy',async()=>{
   const h=copyHarness();
   h.store.queueList({...h.local,id:'import_local',purchaseId:'import_local',householdId:'home',sourceRef:'local',closedAt:undefined});
-  h.ui.copyToHousehold(h.local);await h.sync();
+  await h.ui.copyToHousehold(h.local);await h.sync();
   assert.equal(h.store.pendingCount(),0,h.store.error);
   assert.equal(Object.keys(h.records).length,1);
 });

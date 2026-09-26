@@ -1,6 +1,7 @@
 (function(root){
   'use strict';
   const copy=x=>JSON.parse(JSON.stringify(x));
+  const disk=root.ShoppingStorage||localStorage;
   const empty=()=>({lists:{},purchases:{},preferences:{},pendingLists:{},pendingFinishes:{},pendingPreferences:{},dismissed:{},categoryCache:{}});
   const array=x=>Array.isArray(x)?x:(x&&typeof x==='object'?Object.values(x):[]);
   const normalizeList=l=>({...l,tasks:array(l.tasks).filter(Boolean).map(t=>({...t,photos:array(t.photos).filter(Boolean)}))});
@@ -9,11 +10,18 @@
     constructor(onChange){this.onChange=onChange;this.uid=null;this.householdId=null;this.key='todo_shopping_guest_v1';this.data=this.read();this.error='';this.generation=0;this.authGeneration=0;this.flushing=false;this.flushToken=null;this.retryTimer=null;this.retryAttempt=0;this.cloud=null;
       root.addEventListener('online',()=>{this.resetRetry();this.flush();});root.addEventListener('shopping-cloud-ready',()=>this.connect());this.connect();
     }
-    read(key=this.key){try{const data={...empty(),...JSON.parse(localStorage.getItem(key)||'{}')};for(const [id,l] of Object.entries(data.lists))data.lists[id]=normalizeList(l);for(const [id,p] of Object.entries(data.purchases))data.purchases[id]=normalizePurchase(p);return data;}catch(_){return empty();}}
-    persist(){try{localStorage.setItem(this.key,JSON.stringify(this.data));}catch(_){this.error='Não foi possível salvar neste aparelho. Libere espaço antes de continuar.';throw new Error(this.error);}}
+    read(key=this.key){try{const data={...empty(),...JSON.parse(disk.getItem(key)||'{}')};for(const [id,l] of Object.entries(data.lists))data.lists[id]=normalizeList(l);for(const [id,p] of Object.entries(data.purchases))data.purchases[id]=normalizePurchase(p);return data;}catch(_){return empty();}}
+    writeData(key,data){
+      const generation=this.generation;
+      const failed=()=>{if(generation===this.generation){this.error='Não foi possível salvar as compras neste aparelho. Suas listas originais foram preservadas. Tente novamente.';this.notify();}};
+      try{const saving=disk.setItem(key,JSON.stringify(data));saving?.catch?.(failed);return saving;}
+      catch(error){failed();throw new Error(this.error);}
+    }
+    persist(){return this.writeData(this.key,this.data);}
+    whenSaved(){return disk.whenSaved?.()||Promise.resolve();}
     notify(){this.onChange?.(this);}
     localData(){return this.key==='todo_shopping_guest_v1'?this.data:this.read('todo_shopping_guest_v1');}
-    persistLocal(data){try{localStorage.setItem('todo_shopping_guest_v1',JSON.stringify(data));}catch(_){this.error='Não foi possível salvar neste aparelho. Libere espaço antes de continuar.';throw new Error(this.error);}if(this.key==='todo_shopping_guest_v1')this.data=data;}
+    persistLocal(data){this.writeData('todo_shopping_guest_v1',data);if(this.key==='todo_shopping_guest_v1')this.data=data;}
     history(){
       const purchases=new Map(Object.values(this.localData().purchases).map(p=>[p.sourceRef||p.id,{...normalizePurchase(p),localOnly:true}]));
       if(this.key!=='todo_shopping_guest_v1')for(const p of Object.values(this.data.purchases))purchases.set(p.sourceRef||p.id,{...normalizePurchase(p),...(!this.householdId?{localOnly:true}:{})});
@@ -106,6 +114,7 @@
       if(this.flushing || !this.cloud || !this.householdId || !navigator.onLine)return;
       this.flushing=true;const token={};this.flushToken=token;const generation=this.generation,id=this.householdId;let networkFailure=false,failed=false;
       try{
+        if(disk.whenSaved){await this.whenSaved();if(generation!==this.generation)return;}
         for(const [key,value] of Object.entries(this.data.pendingPreferences)){
           await this.cloud.call('setHouseholdPreference',{householdId:id,key,value});if(generation!==this.generation)return;
           if(this.data.pendingPreferences[key]===value)delete this.data.pendingPreferences[key];this.persist();

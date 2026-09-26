@@ -1,4 +1,5 @@
-(function(){
+(async function(){
+      await window.ShoppingStorage?.ready;
       // State
       let shopping = null;
       let pendingQuickItems = [];
@@ -6269,11 +6270,12 @@
       const isLocalhost = (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
       const isSecureContext = (location.protocol === 'https:' || isLocalhost);
       if('serviceWorker' in navigator && isSecureContext){
-        window.addEventListener('load', ()=>{
-          navigator.serviceWorker.register('service-worker.js').catch((err)=>{
+        const registerWorker=()=>{
+          navigator.serviceWorker.register('service-worker.js',{updateViaCache:'none'}).then(reg=>reg.update()).catch((err)=>{
             console.error('Service worker registration failed', err);
           });
-        });
+        };
+        if(document.readyState==='complete')registerWorker();else window.addEventListener('load',registerWorker,{once:true});
       }
 
     })();
