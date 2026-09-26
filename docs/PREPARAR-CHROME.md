@@ -9,7 +9,9 @@ O código foi adaptado para **Firebase Spark gratuito + GitHub Pages** e publica
 - Regras do Realtime Database publicadas. As regras preexistentes de `sharedLists` foram comparadas e preservadas integralmente.
 - App Check continua aplicado ao Realtime Database; nenhuma proteção foi desativada.
 - Jev permanece sem endpoint e sem chamadas. Nenhum Worker, integração ou plano Cloudflare foi ativado nesta publicação.
-- Pendente: identificar as duas contas, concluir o primeiro login de cada uma, cadastrar seus UIDs na casa e validar a sincronização em dois aparelhos. A página nova abriu sem erros no console, e o fluxo Google chegou à escolha de conta.
+- As duas contas concluíram o login e foram vinculadas à mesma casa. As identificações ficam apenas no Firebase, fora deste repositório público.
+- Corrigida a restauração da sessão antes de abrir a conexão com o banco (`ef9e332`, cache PWA v51). Validado no site publicado: leitura da casa sem erro, criação da lista “Teste de sincronização” com “Arroz”, gravação no banco e leitura após recarregar.
+- Pendente: confirmar que a lista de teste aparece nos dois celulares atualizados. Jev continua desligado.
 
 Os passos abaixo ficam como referência para concluir essa configuração ou repeti-la em outro ambiente.
 
