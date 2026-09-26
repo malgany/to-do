@@ -1,6 +1,17 @@
 # Preparar o Chrome para finalizar a configuração
 
-O código foi adaptado para **Firebase Spark gratuito + GitHub Pages**. Nada foi publicado nesta etapa. Não ative Blaze nem vincule faturamento ao Firebase. O Jev é opcional e pode ficar para depois.
+O código foi adaptado para **Firebase Spark gratuito + GitHub Pages** e publicado em 25/09/2026. Não ative Blaze nem vincule faturamento ao Firebase. O Jev continua desligado.
+
+## Situação da publicação
+
+- Frontend publicado em https://malgany.github.io/to-do/ pelo commit `6ef56ab`; execução do Pages concluída com sucesso.
+- Firebase confirmado no plano Spark. Login Google ativado e domínio `malgany.github.io` autorizado.
+- Regras do Realtime Database publicadas. As regras preexistentes de `sharedLists` foram comparadas e preservadas integralmente.
+- App Check continua aplicado ao Realtime Database; nenhuma proteção foi desativada.
+- Jev permanece sem endpoint e sem chamadas. Nenhum Worker, integração ou plano Cloudflare foi ativado nesta publicação.
+- Pendente: identificar as duas contas, concluir o primeiro login de cada uma, cadastrar seus UIDs na casa e validar a sincronização em dois aparelhos. A página nova abriu sem erros no console, e o fluxo Google chegou à escolha de conta.
+
+Os passos abaixo ficam como referência para concluir essa configuração ou repeti-la em outro ambiente.
 
 ## Deixe pronto o essencial
 
