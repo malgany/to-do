@@ -11,7 +11,7 @@
 .shopping-scope-description{flex:1;min-width:0;color:var(--muted);font-size:12px;line-height:1.35}
 .shopping-utility-button{min-height:36px;padding:0 10px;border:0;border-radius:10px;background:transparent;color:var(--brand-700);font:inherit;font-size:13px;font-weight:700;cursor:pointer}
 .shopping-utility-button:hover{background:var(--brand-50)}
-.shopping-tools{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:center;gap:8px;margin:0 0 16px}
+.shopping-tools{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:center;gap:8px;margin:20px 0 16px}
 .shopping-home-bar small,.shopping-tools small,.shopping-tools p{flex-basis:100%;font-size:13px;color:var(--muted)}
 .shopping-tools:empty{display:none}
 .shopping-tools .shopping-copy-house,.shopping-tools .shopping-sync-status,.shopping-copy-notice{grid-column:1/-1;width:100%}
