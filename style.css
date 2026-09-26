@@ -1738,28 +1738,6 @@ html:not(.dark) body.list-detail-screen-active .list-name{
   line-height:1.08;
   letter-spacing:0;
 }
-.list-summary-chips{
-  display:flex;
-  flex-wrap:wrap;
-  gap:10px;
-  margin-top:14px;
-}
-.list-summary-chip{
-  display:inline-flex;
-  align-items:center;
-  gap:6px;
-  min-height:31px;
-  padding:0 12px;
-  border-radius:10px;
-  font-size:13px;
-  font-weight:800;
-  line-height:1;
-}
-.list-summary-chip svg{width:14px;height:14px}
-.list-summary-count{
-  background:#EAF2FF;
-  color:#2F73F6;
-}
 .task-filter-chips{
   display:grid;
   grid-template-columns:1fr 1fr 1fr;
@@ -2162,10 +2140,6 @@ html:not(.dark) body.list-detail-screen-active .tasks-empty-state{
   font-weight:800;
   line-height:1.08;
   letter-spacing:0;
-}
-.dark .list-summary-count{
-  background:rgba(59,130,246,0.18);
-  color:#93C5FD;
 }
 .dark .task-filter-chip{
   border-color:#253247;

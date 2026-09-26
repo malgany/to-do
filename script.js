@@ -297,7 +297,6 @@
       const modalCancel = el('modalCancel');
       const modalPrimary = el('modalPrimary');
       const currentListName = el('currentListName');
-      const listSummaryChips = el('listSummaryChips');
       const taskFilterChips = el('taskFilterChips');
       const taskReorderHint = el('taskReorderHint');
       const appTitle = el('appTitle');
@@ -3065,10 +3064,6 @@
           : [];
       }
 
-      function formatListTaskCount(count){
-        return `${count} ${count === 1 ? 'tarefa' : 'tarefas'}`;
-      }
-
       function formatListProgress(completedCount, totalCount){
         return `${completedCount}/${totalCount} finalizados`;
       }
@@ -3336,16 +3331,6 @@
           button.classList.toggle('active', active);
           button.setAttribute('aria-checked', active ? 'true' : 'false');
         });
-      }
-
-      function renderListSummaryChips(totalCount){
-        if(!listSummaryChips){ return; }
-        listSummaryChips.innerHTML = '';
-
-        const countChip = document.createElement('span');
-        countChip.className = 'list-summary-chip list-summary-count';
-        countChip.textContent = formatListTaskCount(totalCount);
-        listSummaryChips.appendChild(countChip);
       }
 
       function renderTaskFilterChips(counts){
@@ -4531,7 +4516,6 @@
         if(document && document.body){
           document.body.classList.toggle('task-filter-done-active', currentTaskFilter === 'done');
         }
-        renderListSummaryChips(visibleTasks.length);
         renderTaskFilterChips(counts);
 
         // Carregar grupos locais da lista

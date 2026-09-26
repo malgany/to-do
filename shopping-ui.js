@@ -13,7 +13,7 @@
       this.dialog.addEventListener('close',()=>this.returnFocus?.focus?.());
       this.dialog.addEventListener('click',e=>{if(e.target===this.dialog){const r=this.dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)this.dialog.close();}});
       const home=document.getElementById('screenLists');this.homeBar=node('div',undefined,'shopping-home-bar');home.prepend(this.homeBar);
-      this.bar=node('div',undefined,'shopping-tools');document.getElementById('listSummaryChips').after(this.bar);
+      this.bar=node('div',undefined,'shopping-tools');document.getElementById('taskFilterChips').before(this.bar);
       this.quickBar=node('div',undefined,'shopping-quick-tools');document.getElementById('quickAccordion').before(this.quickBar);
       this.detail=node('div',undefined,'shopping-category-editor');document.getElementById('taskDetailText').after(this.detail);
       this.kindField=node('label','Tipo da lista','shopping-kind-field');this.kindSelect=select([['','Tarefas'],...Object.entries(C.kinds)],'','Tipo da lista');this.kindField.append(this.kindSelect);document.querySelector('#modalBackdrop .modal-body').append(this.kindField);
