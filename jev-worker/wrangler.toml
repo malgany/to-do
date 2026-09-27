@@ -10,7 +10,7 @@ preview_urls = false
 ALLOWED_ORIGIN = "https://malgany.github.io"
 FIREBASE_DATABASE_URL = "https://to-do-8574b-default-rtdb.firebaseio.com"
 HOUSEHOLD_ID = "casa_casal"
-JEV_ENABLED = "false"
+JEV_ENABLED = "true"
 
 [[ratelimits]]
 name = "RATE_LIMITER"

@@ -1,5 +1,5 @@
 // Optional proxy. No Firebase Admin credentials or paid Firebase services.
-// Keep JEV_ENABLED false until the Portuguese evaluation has passed.
+// Enable production only after the Portuguese evaluation passes.
 export const CATEGORIES = Object.freeze({
   mercado: {'basicos':'Básicos','padaria-cafe':'Padaria e café','hortifruti':'Hortifruti','carnes-frios':'Carnes e frios','laticinios-conservas':'Laticínios e conservas','temperos-molhos':'Temperos e molhos','limpeza':'Limpeza','higiene':'Higiene pessoal'},
   farmacia: {'medicamentos':'Medicamentos','suplementos':'Suplementos','bebe-crianca':'Bebê e criança','pele-banho':'Pele e banho','primeiros-socorros':'Primeiros socorros','maternidade':'Maternidade'},

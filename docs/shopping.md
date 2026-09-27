@@ -6,7 +6,7 @@ O frontend permanece no GitHub Pages. Login Google e Realtime Database usam o pr
 
 O compartilhamento é específico para uma casa com duas contas previamente autorizadas por um administrador. Não há criação de casas/convites pelo cliente. A interface oferece login e identificação da conta antes do vínculo; depois do provisionamento, listas, histórico e preferências são sincronizados automaticamente.
 
-Categorias e sugestões funcionam no navegador, sem modelo. Jev é opcional: um Cloudflare Worker no plano Free valida o token Firebase e a autorização no banco antes de enviar nomes de itens desconhecidos à TypeSafe. A chave fica no segredo `JEV_API_KEY` do Worker. O app contém somente a URL pública em `shopping-config.js`, vazia por padrão.
+Categorias e sugestões funcionam no navegador, sem modelo. Jev é opcional: um Cloudflare Worker no plano Free valida o token Firebase e a autorização no banco antes de enviar nomes de itens desconhecidos à TypeSafe. A chave fica no segredo `JEV_API_KEY` do Worker. O app contém somente a URL pública do Worker em `shopping-config.js`.
 
 ## Funcionalidades e critério das sugestões
 
@@ -56,9 +56,9 @@ python -m http.server 8765 --bind 127.0.0.1
 
 Abra `http://127.0.0.1:8765/?emulators`. Apenas localhost/127.0.0.1 aceitam esse parâmetro. As contas/casa também precisam ser provisionadas no banco emulado para usar compartilhamento. Sem o parâmetro, a configuração Firebase é a de produção; não faça testes de escrita reais involuntariamente.
 
-## Configuração e publicação pelo Chrome (etapa posterior)
+## Configuração e publicação
 
-O roteiro simples para preparar as sessões está em [PREPARAR-CHROME.md](PREPARAR-CHROME.md). Nada foi publicado nesta etapa.
+O roteiro original para preparar as sessões está em [PREPARAR-CHROME.md](PREPARAR-CHROME.md). A casa e o Worker já foram configurados; os passos abaixo também servem para conferir ou recuperar a implantação.
 
 1. Conferir Spark e manter faturamento desligado. Não executar `firebase deploy --only functions` nem criar Cloud Functions.
 2. Ativar Google em Authentication, conferir nome/e-mail de suporte e autorizar o hostname real do GitHub Pages, sem caminho. Para a URL padrão do repositório: `malgany.github.io`. Conferir também App Check/reCAPTCHA existente; não desativar proteções para contornar falhas.
@@ -81,17 +81,17 @@ Criar a ACL antes dos vínculos. Não importar JSON na raiz do banco nem sobresc
 
 O Worker está em `jev-worker/worker.mjs` e a configuração em `jev-worker/wrangler.toml`. O nome é `to-do-jev`, a pasta raiz para Workers Builds é `jev-worker`, sem comando de build personalizado, e o comando de deploy é `npx wrangler@4 deploy` (requer versão 4.36 ou superior). Use o plano Workers Free. Não precisa domínio próprio, mudança de DNS ou Firebase pago.
 
-O Worker `to-do-jev` foi criado no painel Cloudflare Workers Free e publicado manualmente em `https://to-do-jev.yopsadida.workers.dev`. O painel agora permite configurar o binding Rate limiter diretamente: variável `RATE_LIMITER`, namespace `20260925`, limite 10, período 60 segundos. As variáveis públicas `ALLOWED_ORIGIN`, `FIREBASE_DATABASE_URL`, `HOUSEHOLD_ID` e `JEV_ENABLED=false` também estão em Production. O código publicado é uma versão minificada de `jev-worker/worker.mjs`; alterações futuras nesse arquivo precisam ser publicadas de novo. A integração Workers Builds pelo Git é opcional e, se usada, deve apontar para a pasta `jev-worker` e manter nome e bindings sincronizados com `wrangler.toml`.
+O Worker `to-do-jev` foi criado no painel Cloudflare Workers Free e publicado manualmente em `https://to-do-jev.yopsadida.workers.dev`. O painel permite configurar o binding Rate limiter diretamente: variável `RATE_LIMITER`, namespace `20260925`, limite 10, período 60 segundos. As variáveis públicas `ALLOWED_ORIGIN`, `FIREBASE_DATABASE_URL`, `HOUSEHOLD_ID` e `JEV_ENABLED=true` estão em Production. O código publicado é uma versão minificada de `jev-worker/worker.mjs`; alterações futuras nesse arquivo precisam ser publicadas de novo. A integração Workers Builds pelo Git é opcional e, se usada, deve apontar para a pasta `jev-worker` e manter nome e bindings sincronizados com `wrangler.toml`.
 
 Antes de publicar, confirmar os valores públicos:
 
 - `ALLOWED_ORIGIN`: origem HTTPS do frontend, sem `/to-do/`.
 - `FIREBASE_DATABASE_URL`: URL HTTPS exata do banco existente.
 - `HOUSEHOLD_ID`: `casa_casal`, igual à casa provisionada.
-- `JEV_ENABLED`: manter `false` até a avaliação real aprovada.
+- `JEV_ENABLED`: `true` após a avaliação real aprovada; `false` interrompe as chamadas ao modelo.
 - `JEV_API_KEY`: segredo criptografado do Worker, nunca variável pública ou arquivo Git.
 
-O segredo deve ser configurado em Workers & Pages → `to-do-jev` → Settings → Runtime variables and secrets → Add variable, com Key `JEV_API_KEY`, opção Secret marcada e apenas Production selecionado. O usuário deve colar o valor e concluir `Add variable and deploy` diretamente no Cloudflare. Não colocar a chave em variável comum, variável de build, frontend, GitHub ou chat. Após aprovar a avaliação real, colocar a URL HTTPS terminando em `/classify` em `shopping-config.js`, publicar o frontend, mudar `JEV_ENABLED` para `true` e habilitar a preferência da casa. Mudanças nas variáveis definidas em Wrangler devem ser refletidas no arquivo para não serem revertidas numa futura publicação por Wrangler.
+O segredo é configurado em Workers & Pages → `to-do-jev` → Settings → Runtime variables and secrets, como `JEV_API_KEY` do tipo Secret somente em Production. Para substituí-lo, usar Edit → Rotate → Deploy; o valor antigo nunca pode ser lido de volta. Não colocar a chave em variável comum, variável de build, frontend, GitHub ou chat. A URL HTTPS terminando em `/classify` está em `shopping-config.js`. A preferência "Usar Jev para itens desconhecidos" em Nossa casa também deve estar ligada para fazer chamadas. Mudanças nas variáveis definidas em Wrangler devem ser refletidas no arquivo para não serem revertidas numa futura publicação por Wrangler.
 
 O Worker exige Origin exata, Firebase ID token válido, membro da casa, preferência ativa e limitador disponível. Não confia em claims JWT decodificados pelo cliente. Aceita até 25 nomes de 500 caracteres, escolhe categorias de uma lista fixa por tipo e filtra respostas por confiança ≥0,85 e probabilidade ≥0,90. Não recebe fotos nem histórico; falhas deixam os itens no catálogo/Outros.
 
@@ -99,9 +99,9 @@ Há limite aproximado de 10 chamadas/minuto por casa e por localidade Cloudflare
 
 ## Avaliação do modelo
 
-`npm run eval:jev:check` valida os 168 exemplos sem chamar a API. Para uma avaliação real, configure `JEV_API_KEY` apenas no ambiente do terminal e rode `npm run eval:jev`; ela envia somente exemplos do conjunto e pode consumir créditos TypeSafe. Não coloque a chave no chat. O relatório local fica em `test-results/jev-evaluation.json` e é ignorado pelo Git. O gate exige ≥98% de precisão entre respostas aceitas e ≥50% de cobertura, também no subconjunto de itens adicionais, sem erros de rede.
+`npm run eval:jev:check` valida os 168 exemplos sem chamar a API. A avaliação real envia somente os exemplos que o catálogo e as regras locais não classificam e que, portanto, podem chegar ao Jev. No Git Bash, `bash tools/evaluate-jev-interactive.sh` pede a chave com entrada oculta e executa a avaliação sem salvá-la em arquivo. O relatório local fica em `test-results/jev-evaluation.json` e é ignorado pelo Git. O gate exige ≥98% de precisão entre respostas aceitas e ≥50% de cobertura dos itens elegíveis, sem erros de rede.
 
-A avaliação real ainda não foi executada. No momento da configuração pelo Chrome, podemos usar uma sessão de terminal local autorizada para executar o conjunto com o segredo, sem registrá-lo em arquivos versionados, ou manter Jev desligado até essa verificação ser concluída. Apenas colar a chave no Worker não comprova qualidade. Mudar modelo, prompt ou taxonomia exige nova avaliação e versão de cache.
+A avaliação real de `jev-1.13.0` em 27/09/2026 passou: 31 itens elegíveis, 27 respostas aceitas (87,1% de cobertura), 100% de precisão entre as aceitas e nenhum erro de rede. Um teste inicial que também enviava itens resolvidos localmente falhou por três classificações incorretas nesses itens; esses casos não alcançam o Worker no fluxo do app. Mudar modelo, instruções, categorias ou regras locais exige nova avaliação e revisão da versão de cache.
 
 ## Limites e referências
 
