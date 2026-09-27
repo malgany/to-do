@@ -42,12 +42,14 @@ export async function handleRequest(request, env, {fetch: fetcher = globalThis.f
   const reply = (data, status = 200) => new Response(JSON.stringify(data), {status, headers});
   const error = (code, message, status) => reply({error:{code,message}}, status);
   if (!allowed) return error('permission-denied','Origem não autorizada.',403);
-  if (request.method === 'OPTIONS') return new Response(null, {status:204,headers:{...headers,'Access-Control-Allow-Methods':'POST, OPTIONS','Access-Control-Allow-Headers':'Authorization, Content-Type','Access-Control-Max-Age':'600'}});
+  if (request.method === 'OPTIONS') return new Response(null, {status:204,headers:{...headers,'Access-Control-Allow-Methods':'POST, OPTIONS','Access-Control-Allow-Headers':'Authorization, Content-Type, X-Firebase-AppCheck','Access-Control-Max-Age':'600'}});
   if (request.method !== 'POST') return error('invalid-argument','Método inválido.',405);
   if (env.JEV_ENABLED !== 'true') return error('failed-precondition','Classificação externa desativada.',503);
   if (!env.JEV_API_KEY || typeof env.RATE_LIMITER?.limit !== 'function') return error('unavailable','Classificação indisponível.',503);
   const bearer = request.headers.get('Authorization') || '';
   if (bearer.length > 8192 || !/^Bearer [A-Za-z0-9._-]+$/.test(bearer)) return error('unauthenticated','Entre com sua conta Google.',401);
+  const appCheckToken = request.headers.get('X-Firebase-AppCheck') || '';
+  if (appCheckToken.length > 8192 || !/^[A-Za-z0-9._-]+$/.test(appCheckToken)) return error('unauthenticated','Verificação do aplicativo indisponível.',401);
   if (!/^application\/json(?:\s*;|$)/i.test(request.headers.get('Content-Type') || '')) return error('invalid-argument','Envie JSON.',400);
   let data;
   try { data = await boundedJson(request, 16384); } catch { return error('invalid-argument','Dados inválidos ou grandes demais.',400); }
@@ -59,7 +61,7 @@ export async function handleRequest(request, env, {fetch: fetcher = globalThis.f
   const readFirebase = async path => {
     const url = new URL(path + '.json', env.FIREBASE_DATABASE_URL.replace(/\/$/,'') + '/');
     url.searchParams.set('auth', bearer.slice(7));
-    return fetcher(url.toString(), {method:'GET',redirect:'error',signal:AbortSignal.timeout(2000)});
+    return fetcher(url.toString(), {method:'GET',headers:{'X-Firebase-AppCheck':appCheckToken},redirect:'error',signal:AbortSignal.timeout(2000)});
   };
   try {
     const access = await readFirebase('householdAccess/' + env.HOUSEHOLD_ID);

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'todo-pwa-v60';
+const CACHE_NAME = 'todo-pwa-v61';
 const ASSETS = [
   './',
   './index.html',
@@ -13,7 +13,7 @@ const ASSETS = [
   './shopping-storage.js?v=1',
   './shopping-store.js?v=2',
   './shopping-ui.js?v=8',
-  './shopping-cloud.js?v=1',
+  './shopping-cloud.js?v=2',
   './manifest.json?v=1.0.1',
   './assets/quick-lists/quick-market.jpg',
   './assets/quick-lists/quick-pharmacy.jpg',

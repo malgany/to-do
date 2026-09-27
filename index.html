@@ -359,7 +359,7 @@
     const firebaseAuth = getAuth(firebaseApp);
     if(useFirebaseEmulators) connectAuthEmulator(firebaseAuth,'http://127.0.0.1:9099',{disableWarnings:true});
     try{
-      if(!useFirebaseEmulators) initializeAppCheck(firebaseApp, {
+      if(!useFirebaseEmulators) window.todoAppCheck = initializeAppCheck(firebaseApp, {
         provider: new ReCaptchaV3Provider('6LfoGtUrAAAAAI_hvP9snJSkpCkBjrGgHHWbxcup'),
         isTokenAutoRefreshEnabled: true,
       });
@@ -989,7 +989,7 @@
   <script src="shopping-storage.js?v=1"></script>
   <script src="shopping-store.js?v=2"></script>
   <script src="shopping-ui.js?v=8"></script>
-  <script src="shopping-cloud.js?v=1"></script>
+  <script src="shopping-cloud.js?v=2"></script>
   <script src="script.js?v=1.8.3"></script>
 </body>
 </html>

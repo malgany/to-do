@@ -6,7 +6,7 @@
     if(starting||window.ShoppingCloud||!window.firebaseReady||!window.todoFirebaseApp)return;
     starting=true;
     const base='https://www.gstatic.com/firebasejs/10.14.1/';
-    const [A,D]=await Promise.all([import(base+'firebase-auth.js'),import(base+'firebase-database.js')]);
+    const [A,D,AC]=await Promise.all([import(base+'firebase-auth.js'),import(base+'firebase-database.js'),import(base+'firebase-app-check.js')]);
     const auth=A.getAuth(window.todoFirebaseApp),db=D.getDatabase(window.todoFirebaseApp),R=window.ShoppingRemote;
     const error=(message,code)=>Object.assign(new Error(message),{code:'shopping/'+code});
     async function call(name,args){
@@ -17,7 +17,10 @@
         if(!endpoint||!endpoint.startsWith('https://'))throw error('Jev ainda não configurado.','failed-precondition');
         const token=await user.getIdToken();
         if(auth.currentUser!==user)throw error('A conta mudou.','cancelled');
-        const response=await fetch(endpoint,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({householdId:args.householdId,kind:args.kind,items:args.items}),signal:AbortSignal.timeout(8000),credentials:'omit'});
+        if(!window.todoAppCheck)throw error('App Check indisponível.','unavailable');
+        const appCheckToken=(await AC.getToken(window.todoAppCheck)).token;
+        if(auth.currentUser!==user)throw error('A conta mudou.','cancelled');
+        const response=await fetch(endpoint,{method:'POST',headers:{Authorization:'Bearer '+token,'X-Firebase-AppCheck':appCheckToken,'Content-Type':'application/json'},body:JSON.stringify({householdId:args.householdId,kind:args.kind,items:args.items}),signal:AbortSignal.timeout(8000),credentials:'omit'});
         if(!response.ok)throw error('Classificação indisponível.','unavailable');
         return response.json();
       }

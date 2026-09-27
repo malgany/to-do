@@ -83,6 +83,8 @@ O Worker está em `jev-worker/worker.mjs` e a configuração em `jev-worker/wran
 
 O Worker `to-do-jev` foi criado no painel Cloudflare Workers Free e publicado manualmente em `https://to-do-jev.yopsadida.workers.dev`. O painel permite configurar o binding Rate limiter diretamente: variável `RATE_LIMITER`, namespace `20260925`, limite 10, período 60 segundos. As variáveis públicas `ALLOWED_ORIGIN`, `FIREBASE_DATABASE_URL`, `HOUSEHOLD_ID` e `JEV_ENABLED=true` estão em Production. O código publicado é uma versão minificada de `jev-worker/worker.mjs`; alterações futuras nesse arquivo precisam ser publicadas de novo. A integração Workers Builds pelo Git é opcional e, se usada, deve apontar para a pasta `jev-worker` e manter nome e bindings sincronizados com `wrangler.toml`.
 
+O frontend envia o token Firebase Auth e o token App Check no cabeçalho `X-Firebase-AppCheck`. O Worker encaminha o segundo token às leituras REST do Realtime Database, que mantém o App Check obrigatório. A origem e a pertença à casa são conferidas antes de chamar a TypeSafe; o token App Check não vai na URL nem é armazenado pelo Worker.
+
 Antes de publicar, confirmar os valores públicos:
 
 - `ALLOWED_ORIGIN`: origem HTTPS do frontend, sem `/to-do/`.
