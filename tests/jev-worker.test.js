@@ -27,6 +27,8 @@ test('Origin and Firebase membership gates never forward unauthorized requests t
   for(const access of [new Response('Denied',{status:401}),Response.json(null),Response.json({user:true,other:false}),Response.json({a:true,b:true,c:true})]){
     const s=setup({},[access]);assert.equal((await s.run(s.request())).status,403);assert.equal(s.calls.length,1);assert.equal(s.limits.length,0);
   }
+  const redirect=setup({},[new Response(null,{status:307,headers:{Location:'https://elsewhere.example/'}})]);
+  assert.equal((await redirect.run(redirect.request())).status,503);assert.equal(redirect.calls.length,1);assert.equal(redirect.limits.length,0);
   const disabled=setup({},[Response.json({a:true}),Response.json(false)]);assert.equal((await disabled.run(disabled.request())).status,403);assert.equal(disabled.calls.length,2);assert.equal(disabled.limits.length,0);
 });
 test('Preflight never contacts Firebase or Jev',async()=>{
@@ -45,7 +47,10 @@ test('Authenticated member receives only accepted categories and no credentials'
   assert.deepEqual(s.limits,[{key:'jev:our_house'}]);assert.match(s.calls[0].url,/householdAccess\/our_house.json\?auth=id.token.signature/);
   assert.equal(s.calls[0].options.headers['X-Firebase-AppCheck'],'app.check.token');
   assert.equal(s.calls[1].options.headers['X-Firebase-AppCheck'],'app.check.token');
+  assert.equal(s.calls[0].options.redirect,'manual');
+  assert.equal(s.calls[1].options.redirect,'manual');
   const upstream=s.calls[2];assert.equal(upstream.options.headers.Authorization,'Bearer test-secret');
+  assert.equal(upstream.options.redirect,'manual');
   assert.equal(upstream.options.signal instanceof AbortSignal,true);assert.equal(JSON.parse(upstream.options.body).questions.rice.criteria.basicos,'Básicos');
   assert.equal(r.headers.get('Cache-Control'),'no-store');
 });
