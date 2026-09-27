@@ -8,7 +8,8 @@ O código foi adaptado para **Firebase Spark gratuito + GitHub Pages** e publica
 - Firebase confirmado no plano Spark. Login Google ativado e domínio `malgany.github.io` autorizado.
 - Regras do Realtime Database publicadas. As regras preexistentes de `sharedLists` foram comparadas e preservadas integralmente.
 - App Check continua aplicado ao Realtime Database; nenhuma proteção foi desativada.
-- Jev permanece sem endpoint e sem chamadas. Nenhum Worker, integração ou plano Cloudflare foi ativado nesta publicação.
+- Nesta publicação inicial, Jev ficou sem endpoint e sem chamadas.
+- Em 27/09/2026, o Worker `to-do-jev` foi publicado no Cloudflare Workers Free, ainda com `JEV_ENABLED=false` e sem endpoint no frontend. O segredo e a avaliação real continuam pendentes.
 - As duas contas concluíram o login e foram vinculadas à mesma casa. As identificações ficam apenas no Firebase, fora deste repositório público.
 - Corrigida a restauração da sessão antes de abrir a conexão com o banco (`ef9e332`, cache PWA v51). Validado no site publicado: leitura da casa sem erro, criação da lista “Teste de sincronização” com “Arroz”, gravação no banco e leitura após recarregar.
 - Pendente: confirmar que a lista de teste aparece nos dois celulares atualizados. Jev continua desligado.
@@ -40,7 +41,7 @@ Estar logado na TypeSafe não comprova que a API já está liberada ou tem saldo
 5. Conferir lista compartilhada, histórico, sugestões, duas sessões simultâneas, offline/reconexão e a PWA instalada.
 6. Se Jev estiver pronto: conectar o Worker ao repositório pelo painel Cloudflare (pasta `jev-worker`), configurar o segredo, avaliar os exemplos e, só após o resultado aprovado, habilitar o serviço e publicar a URL pública em `shopping-config.js`.
 
-O Worker usa uma configuração de limite que não aparece no painel Cloudflare. Por isso sua publicação deve usar a integração Git do Cloudflare, que lê `wrangler.toml` e executa a publicação automaticamente; não basta colar o JavaScript no editor do painel. A conexão do repositório e os acessos serão conferidos na hora. Não é necessário gerar uma chave privada de conta de serviço Google.
+Atualização de 27/09/2026: o painel Cloudflare passou a oferecer o binding Rate limiter. O Worker `to-do-jev` foi criado manualmente no plano Free, com o binding e as variáveis públicas configurados; `JEV_ENABLED` permanece `false`. O próximo passo é inserir `JEV_API_KEY` como Secret no painel e executar a avaliação real antes de ligar o recurso. Não é necessário token de deploy automático nem chave privada de conta de serviço Google.
 
 Há ações sensíveis em que a extensão pode pedir sua confirmação, como autorizar uma integração ou criar uma chave. Se aparecerem, explicarei a ação específica. Senhas, 2FA, CAPTCHA, termos e eventuais decisões de cobrança ficam com você quando houver necessidade.
 

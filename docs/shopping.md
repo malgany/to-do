@@ -81,7 +81,7 @@ Criar a ACL antes dos vínculos. Não importar JSON na raiz do banco nem sobresc
 
 O Worker está em `jev-worker/worker.mjs` e a configuração em `jev-worker/wrangler.toml`. O nome é `to-do-jev`, a pasta raiz para Workers Builds é `jev-worker`, sem comando de build personalizado, e o comando de deploy é `npx wrangler@4 deploy` (requer versão 4.36 ou superior). Use o plano Workers Free. Não precisa domínio próprio, mudança de DNS ou Firebase pago.
 
-No Chrome, conectar o repositório pelo painel Cloudflare Workers Builds. O binding `RATE_LIMITER` é criado a partir do arquivo Wrangler, pois não é exibido pelo dashboard. Confirme que seu namespace numérico não conflita com outro limitador da conta. O nome do Worker no painel precisa coincidir com o arquivo. Essa integração é uma publicação de servidor separada do GitHub Pages.
+O Worker `to-do-jev` foi criado no painel Cloudflare Workers Free e publicado manualmente em `https://to-do-jev.yopsadida.workers.dev`. O painel agora permite configurar o binding Rate limiter diretamente: variável `RATE_LIMITER`, namespace `20260925`, limite 10, período 60 segundos. As variáveis públicas `ALLOWED_ORIGIN`, `FIREBASE_DATABASE_URL`, `HOUSEHOLD_ID` e `JEV_ENABLED=false` também estão em Production. O código publicado é uma versão minificada de `jev-worker/worker.mjs`; alterações futuras nesse arquivo precisam ser publicadas de novo. A integração Workers Builds pelo Git é opcional e, se usada, deve apontar para a pasta `jev-worker` e manter nome e bindings sincronizados com `wrangler.toml`.
 
 Antes de publicar, confirmar os valores públicos:
 
@@ -91,7 +91,7 @@ Antes de publicar, confirmar os valores públicos:
 - `JEV_ENABLED`: manter `false` até a avaliação real aprovada.
 - `JEV_API_KEY`: segredo criptografado do Worker, nunca variável pública ou arquivo Git.
 
-O segredo deve ser configurado no painel do Worker, não como variável de build exposta ao frontend. Após publicar o endpoint, colocar sua URL HTTPS terminando em `/classify` em `shopping-config.js`, publicar o frontend e habilitar a preferência da casa somente após aprovar a avaliação. Mudanças nas variáveis definidas em Wrangler devem ser refletidas no arquivo para não serem revertidas na próxima publicação.
+O segredo deve ser configurado em Workers & Pages → `to-do-jev` → Settings → Runtime variables and secrets → Add variable, com Key `JEV_API_KEY`, opção Secret marcada e apenas Production selecionado. O usuário deve colar o valor e concluir `Add variable and deploy` diretamente no Cloudflare. Não colocar a chave em variável comum, variável de build, frontend, GitHub ou chat. Após aprovar a avaliação real, colocar a URL HTTPS terminando em `/classify` em `shopping-config.js`, publicar o frontend, mudar `JEV_ENABLED` para `true` e habilitar a preferência da casa. Mudanças nas variáveis definidas em Wrangler devem ser refletidas no arquivo para não serem revertidas numa futura publicação por Wrangler.
 
 O Worker exige Origin exata, Firebase ID token válido, membro da casa, preferência ativa e limitador disponível. Não confia em claims JWT decodificados pelo cliente. Aceita até 25 nomes de 500 caracteres, escolhe categorias de uma lista fixa por tipo e filtra respostas por confiança ≥0,85 e probabilidade ≥0,90. Não recebe fotos nem histórico; falhas deixam os itens no catálogo/Outros.
 
