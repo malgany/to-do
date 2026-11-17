@@ -1,0 +1,24 @@
+*{box-sizing:border-box}html,body{height:100%;margin:0}body{font:15px Arial,sans-serif;color:#151515}
+main.tasks-card{height:100%;min-height:0;display:flex;flex-direction:column}
+h2{display:flex;align-items:center;gap:9px;font-size:clamp(20px,2.7vw + 12px,30px);margin:0}
+h2 svg{width:1em;height:1em}
+.tasks-card>.muted,#status{font-size:14px;color:#777;margin:7px 0}
+.task-list{flex:1;display:grid;grid-template-rows:repeat(5,minmax(0,1fr));margin:0}
+.task-list li{min-height:0;font-size:14px;gap:10px}
+.task-list li>span:nth-child(2),.task-tag{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.task-tag{max-width:35%;flex-shrink:0}
+.task-mark{width:21px;height:21px;background:white;padding:0;cursor:pointer}
+.task-mark:disabled{cursor:default}
+#login{align-self:flex-start;padding:7px 12px;background:white;border:1px solid #bbb;border-radius:6px;cursor:pointer}
+[hidden],.task-list:empty{display:none}
+
+.count-pill{font-size:12px;font-weight:400;background:#eee;padding:3px 8px;border-radius:16px}
+.task-list{padding:0;list-style:none}
+.task-list li{display:flex;align-items:center;border-bottom:1px solid #eee}
+.task-list li:last-child{border:0}
+.task-mark{flex:none;border:1.5px solid #999;border-radius:5px}
+.task-tag{margin-left:auto;padding:4px 8px;border-radius:8px;font-size:12px}
+.yellow{background:#fff2bd}.coral{background:#fad7d8}.blue{background:#d7eaff}.lilac{background:#eadcf7}
+.completed{color:#888}.completed>span:nth-child(2){text-decoration:line-through}
+.completed .task-mark{background:#aaa;border-color:#aaa;color:white}
+@media(max-width:320px){.task-tag{font-size:10px;padding:3px 5px}}
