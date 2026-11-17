@@ -1,11 +1,11 @@
-import {reminders, completeRecord} from './model.js';
+import {recentLists} from './model.js?v=2';
 
 const status = document.querySelector('#status');
 const login = document.querySelector('#login');
-const items = document.querySelector('#items');
+const listRows = document.querySelector('#lists');
 const count = document.querySelector('#count');
 function message(text) { status.textContent = text; status.hidden = !text; }
-function clear() { items.replaceChildren(); count.hidden = true; }
+function clear() { listRows.replaceChildren(); count.hidden = true; }
 
 async function start() {
   const sdk = 'https://www.gstatic.com/firebasejs/10.14.1/';
@@ -25,39 +25,41 @@ async function start() {
   function resetHouse() {
     stopLists?.(); activeHouse = null; lastView = null; clear();
   }
-  function render(user, house, view) {
-    count.textContent = view.pending; count.hidden = false;
-    items.replaceChildren();
-    for (const item of view.items) {
+  function render(lists) {
+    const open = lists.filter(list => !list.closed).length;
+    count.textContent = open;
+    count.setAttribute('aria-label', `Listas em aberto no cartão: ${open}`);
+    count.hidden = false;
+    listRows.replaceChildren();
+    for (const list of lists) {
       const row = document.createElement('li');
-      row.classList.toggle('completed',item.done);
-      const mark = document.createElement('button');
-      mark.className = 'task-mark'; mark.disabled = item.done || !connected;
-      mark.textContent = item.done ? '✓' : '';
-      mark.setAttribute('aria-label',(item.done ? 'Concluído: ' : 'Concluir: ') + item.text);
-      mark.onclick = async () => {
-        mark.disabled = true;
-        const path = D.ref(db,'households/'+house+'/records/'+item.listId);
-        try {
-          await D.runTransaction(path, record => {
-            if (auth.currentUser?.uid !== user.uid || activeHouse !== house) return;
-            return completeRecord(record, house, item, user.uid, Date.now());
-          }, {applyLocally:false});
-        } catch {
-          if (activeHouse === house) { message('Falha ao concluir. Tente novamente.'); mark.disabled = false; }
-        }
-      };
-      const label = document.createElement('span'); label.textContent = item.text;
-      const tag = document.createElement('span');
-      tag.className = 'task-tag '+({mercado:'yellow',farmacia:'coral',pet:'blue'}[item.kind] || 'lilac');
-      tag.textContent = item.title;
-      row.append(mark,label,tag); items.append(row);
+      row.classList.toggle('completed', list.closed);
+
+      const mark = document.createElement('span');
+      mark.className = 'list-mark';
+      mark.setAttribute('role', 'checkbox');
+      mark.setAttribute('aria-checked', String(list.closed));
+      mark.setAttribute('aria-readonly', 'true');
+      mark.setAttribute('aria-label', list.closed ? 'Lista finalizada' : 'Lista em aberto');
+      mark.textContent = list.closed ? '✓' : '';
+
+      const title = document.createElement('span');
+      title.className = 'list-title';
+      title.textContent = list.title;
+
+      const progress = document.createElement('span');
+      progress.className = 'list-progress';
+      progress.textContent = `${list.done}/${list.total}`;
+      progress.setAttribute('aria-label', `${list.done} de ${list.total} itens finalizados`);
+
+      row.append(mark, title, progress);
+      listRows.append(row);
     }
-    message(!connected ? 'Reconectando ao TO-DO…' : view.items.length ? '' : 'Nenhum item nas listas abertas.');
+    message(!connected ? 'Reconectando ao TO-DO…' : lists.length ? '' : 'Nenhuma lista compartilhada.');
   }
   D.onValue(D.ref(db,'.info/connected'), snap => {
     connected = snap.val() === true;
-    if (lastView) render(auth.currentUser,activeHouse,lastView);
+    if (lastView) render(lastView);
   });
   login.onclick = async () => {
     login.disabled = true;
@@ -111,7 +113,7 @@ async function start() {
       stopLists = D.onValue(D.ref(db,'households/'+house+'/records'), data => {
         if (activeHouse !== house || auth.currentUser?.uid !== user.uid) return;
         clearTimeout(timer);
-        try { lastView = reminders(data.val(),house); render(user,house,lastView); }
+        try { lastView = recentLists(data.val(),house); render(lastView); }
         catch { lastView = null; clear(); message('O TO-DO retornou uma lista inválida.'); }
       },readFailed);
     },readFailed);
