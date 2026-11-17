@@ -77,33 +77,54 @@ h2 svg { width: 1em; height: 1em; flex: none; }
 }
 
 .list-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.list-title span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.list-progress {
+.list-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.list-date {
   padding: 4px 8px;
   border-radius: 8px;
-  background: #fff2bd;
-  color: #4b3912;
+  color: #262626;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
+.house-lists li:nth-child(1) .list-date { background: #d9efd9; }
+.house-lists li:nth-child(2) .list-date { background: #fff2bd; }
+.house-lists li:nth-child(3) .list-date { background: #fad7d8; }
+.house-lists li:nth-child(4) .list-date { background: #d7eaff; }
+.house-lists li:nth-child(5) .list-date { background: #eadcf7; }
+
 .completed .list-mark {
-  background: #777;
-  border-color: #777;
+  background: #aaa;
+  border-color: #aaa;
   color: #fff;
 }
 
-.completed .list-title { color: #555; }
-
-.completed .list-progress {
-  background: #ececec;
-  color: #555;
+.completed .list-title { color: #767676; }
+.completed .list-title span {
+  text-decoration: line-through;
 }
 
 #login {
@@ -119,5 +140,5 @@ h2 svg { width: 1em; height: 1em; flex: none; }
 
 @media (max-width: 320px) {
   .house-lists li { font-size: 14px; }
-  .list-progress { font-size: 11px; padding: 3px 5px; }
+  .list-date { font-size: 11px; padding: 3px 5px; }
 }

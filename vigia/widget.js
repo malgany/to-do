@@ -1,4 +1,5 @@
-import {recentLists} from './model.js?v=2';
+import {recentLists} from './model.js?v=3';
+import {renderLists} from './list-view.js?v=3';
 
 const status = document.querySelector('#status');
 const login = document.querySelector('#login');
@@ -21,7 +22,7 @@ async function start() {
   // Wait for the persisted login before opening Firebase subscriptions.
   await auth.authStateReady();
   let stopProfile, stopLists, activeHouse, connected = false;
-  let lastView;
+  let lastView, displayedDay;
   function resetHouse() {
     stopLists?.(); activeHouse = null; lastView = null; clear();
   }
@@ -30,37 +31,18 @@ async function start() {
     count.textContent = open;
     count.setAttribute('aria-label', `Listas em aberto no cartão: ${open}`);
     count.hidden = false;
-    listRows.replaceChildren();
-    for (const list of lists) {
-      const row = document.createElement('li');
-      row.classList.toggle('completed', list.closed);
-
-      const mark = document.createElement('span');
-      mark.className = 'list-mark';
-      mark.setAttribute('role', 'checkbox');
-      mark.setAttribute('aria-checked', String(list.closed));
-      mark.setAttribute('aria-readonly', 'true');
-      mark.setAttribute('aria-label', list.closed ? 'Lista finalizada' : 'Lista em aberto');
-      mark.textContent = list.closed ? '✓' : '';
-
-      const title = document.createElement('span');
-      title.className = 'list-title';
-      title.textContent = list.title;
-
-      const progress = document.createElement('span');
-      progress.className = 'list-progress';
-      progress.textContent = `${list.done}/${list.total}`;
-      progress.setAttribute('aria-label', `${list.done} de ${list.total} itens finalizados`);
-
-      row.append(mark, title, progress);
-      listRows.append(row);
-    }
+    const now = new Date();
+    displayedDay = now.toDateString();
+    renderLists(listRows, lists, now);
     message(!connected ? 'Reconectando ao TO-DO…' : lists.length ? '' : 'Nenhuma lista compartilhada.');
   }
   D.onValue(D.ref(db,'.info/connected'), snap => {
     connected = snap.val() === true;
     if (lastView) render(lastView);
   });
+  setInterval(() => {
+    if (lastView && new Date().toDateString() !== displayedDay) render(lastView);
+  }, 60_000);
   login.onclick = async () => {
     login.disabled = true;
     try {
